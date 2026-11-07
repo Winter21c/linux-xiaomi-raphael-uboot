@@ -1,0 +1,60 @@
+From: Winter21c <winter@localhost>
+Subject: arm64: dts: qcom: sm8150-xiaomi-raphael: ultrawide S5K3L6 node on CCI1
+
+The ultrawide module (stock DT `qcom,cam-sensor@3` = CAMU_*) is on CSIPHY3,
+**CCI1 master0**, MCLK3 = tlmm gpio16, reset = tlmm gpio23, VDIG enable = tlmm
+gpio34, with viodd + BOB + S8 + LDO17 as supplies.
+
+This node lives on the second CCI controller added by patch 0007, so it only
+becomes reachable once that node is in the tree.  It uses the shared Samsung
+bring-up driver (camera/drivers/s5k3t2.c handles `samsung,s5k3l6` too), which
+powers the module and reports the chip id at 16-bit register 0x0000 without
+pretending to stream.
+
+The address is a placeholder - the module has never been powered on mainline, so
+the first run should use `keep_power=1` and scan the new CCI1 adapter for it.
+
+Signed-off-by: Winter21c <winter@localhost>
+---
+--- a/arch/arm64/boot/dts/qcom/sm8150-xiaomi-raphael.dts
++++ b/arch/arm64/boot/dts/qcom/sm8150-xiaomi-raphael.dts
+@@ 	camera_vdig_front: regulator-camera-vdig-front {
+ 		vin-supply = <&vreg_bob>;
+ 	};
++
++	/* ultrawide module VDIG enable, stock DT CAMU_VDIG_EN */
++	camera_vdig_ultra: regulator-camera-vdig-ultra {
++		compatible = "regulator-fixed";
++		regulator-name = "camera_vdig_ultra";
++		regulator-min-microvolt = <1200000>;
++		regulator-max-microvolt = <1200000>;
++		enable-active-high;
++		gpio = <&tlmm 34 GPIO_ACTIVE_HIGH>;
++		vin-supply = <&vreg_bob>;
++	};
+@@ 	cci1: cci@ac4b000 {
+ 		i2c-bus@0 {
+ 			reg = <0>;
+ 			clock-frequency = <400000>;
+ 			#address-cells = <1>;
+ 			#size-cells = <0>;
++
++			/* ultrawide: S5K3L6, CSIPHY3, MCLK3 gpio16,
++			 * reset gpio23, VDIG_EN gpio34 */
++			s5k3l6_ultra: camera@10 {
++				compatible = "samsung,s5k3l6";
++				reg = <0x10>;
++				reset-gpios = <&tlmm 23 GPIO_ACTIVE_LOW>;
++				clocks = <&camcc CAM_CC_MCLK3_CLK>;
++				clock-names = "xvclk";
++				assigned-clocks = <&camcc CAM_CC_MCLK3_CLK>;
++				assigned-clock-rates = <19200000>;
++
++				avdd-supply = <&vreg_bob>;
++				dovdd-supply = <&camera_viodd_ldo>;
++				dvdd-supply = <&camera_vdig_ultra>;
++				vl17-supply = <&vreg_l17a_3p0>;
++				status = "okay";
++			};
+ 		};
+ 	};

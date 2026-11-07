@@ -117,10 +117,12 @@ Two things to verify on the first boot with it:
    DT uses for every camera) before suspecting the register tables.
 
 
-## S5K3T2 bring-up driver (`s5k3t2.c`, 282 lines, not compiled yet)
+## Samsung bring-up driver (`s5k3t2.c`, covers S5K3T2 and S5K3L6, not compiled yet)
 
-No register table exists for the front sensor, so this driver is honest about
-scope: it runs the module's power sequence, drives MCLK2 and the reset pad, reads
+No register table exists for either Samsung module (a 20 MP front sensor and the
+13 MP ultrawide), so this one driver handles both through two compatibles -
+`samsung,s5k3t2` and `samsung,s5k3l6` - and the model string comes from
+`device_get_match_data()`.  It is honest about scope: it runs the module's power sequence, drives MCLK2 and the reset pad, reads
 the Samsung chip-id register (16-bit `0x0000`, the convention S5KJN1 uses with id
 0x38e1 and S5K3M5 with 0x3001) and registers a V4L2 subdevice so the sensor can be
 identified and linked into the media graph.
@@ -140,3 +142,21 @@ Module parameters:
 stock DT carries none and the module has never been powered on mainline, so the
 first run should use `keep_power=1` and scan `/dev/i2c-3` (0x20/0x21 next
 candidates) exactly like the tele module was found at 0x36.
+
+
+## Ultrawide node (patch 0010)
+
+`patches/0010-dts-s5k3l6-node.patch` puts `s5k3l6_ultra: camera@10` on the CCI1
+bus added by patch 0007, with `camera_vdig_ultra` (gpio34), reset gpio23, MCLK3
+gpio16 and the L17 rail.  It is only reachable once both patches are in the same
+DTB, and its address is a placeholder like the front module's - power it with
+`keep_power=1` and scan the new CCI1 adapter.
+
+That gives every one of the four modules a driver:
+
+| module | driver | streams |
+|---|---|---|
+| tele OV8856 | in-tree `ov8856` + patches 0004/0005 | not yet (media graph) |
+| wide IMX586 | `camera/drivers/imx586.c` (ported public driver) | intended, needs build test |
+| front S5K3T2 | `camera/drivers/s5k3t2.c` | no - id/registration only |
+| ultrawide S5K3L6 | `camera/drivers/s5k3t2.c` | no - id/registration only |

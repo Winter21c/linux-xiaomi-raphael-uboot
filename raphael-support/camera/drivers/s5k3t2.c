@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
- * Bring-up driver for the Samsung S5K3T2 front camera of the Redmi K20 Pro
- * (raphael, SM8150).
+ * Bring-up driver for the Samsung S5K3T2 (front) and S5K3L6 (ultrawide) cameras
+ * of the Redmi K20 Pro (raphael, SM8150).
  *
  * The sensor is the only camera on this board for which no register table is
  * publicly available (see camera/drivers/README.md), so this driver deliberately
@@ -65,6 +65,7 @@ struct s5k3t2 {
 	struct regulator *extra_rails[ARRAY_SIZE(s5k3t2_extra_supply_names)];
 	struct v4l2_subdev sd;
 	struct media_pad pad;
+	const char *model;
 	bool powered;
 	u32 chip_id;
 };
@@ -185,6 +186,10 @@ static int s5k3t2_probe(struct i2c_client *client)
 	if (!priv)
 		return -ENOMEM;
 
+	priv->model = (const char *)device_get_match_data(&client->dev);
+	if (!priv->model)
+		priv->model = "Samsung S5K";
+
 	priv->regmap = devm_regmap_init_i2c(client, &(struct regmap_config){
 		.reg_bits = 16,
 		.val_bits = 16,
@@ -239,8 +244,8 @@ static int s5k3t2_probe(struct i2c_client *client)
 		goto err_power;
 	}
 
-	dev_info(&client->dev, "S5K3T2 bring-up driver bound (id 0x%04x, keep_power=%d)\n",
-		 priv->chip_id, keep_power);
+	dev_info(&client->dev, "%s bring-up driver bound (id 0x%04x, keep_power=%d)\n",
+		 priv->model, priv->chip_id, keep_power);
 	return 0;
 
 err_power:
@@ -262,7 +267,8 @@ static void s5k3t2_remove(struct i2c_client *client)
 }
 
 static const struct of_device_id s5k3t2_dt_ids[] = {
-	{ .compatible = "samsung,s5k3t2" },
+	{ .compatible = "samsung,s5k3t2", .data = "S5K3T2 (front)" },
+	{ .compatible = "samsung,s5k3l6", .data = "S5K3L6 (ultrawide)" },
 	{ }
 };
 MODULE_DEVICE_TABLE(of, s5k3t2_dt_ids);
@@ -278,5 +284,5 @@ static struct i2c_driver s5k3t2_i2c_driver = {
 
 module_i2c_driver(s5k3t2_i2c_driver);
 
-MODULE_DESCRIPTION("Bring-up driver for the S5K3T2 front camera (id probe, no streaming)");
+MODULE_DESCRIPTION("Bring-up driver for the Samsung S5K3T2/S5K3L6 cameras (id probe, no streaming)");
 MODULE_LICENSE("GPL");
