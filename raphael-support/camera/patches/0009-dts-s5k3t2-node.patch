@@ -1,0 +1,56 @@
+From: Winter21c <winter@localhost>
+Subject: arm64: dts: qcom: sm8150-xiaomi-raphael: front S5K3T2 node
+
+Supersedes the borrowed-driver trick of patch 0006 for the front module.  With
+camera/drivers/s5k3t2.c available, the node can use its real compatible string.
+
+Front module facts (from the stock camera DT, `qcom,cam-sensor@2` = CAMF_*):
+CSIPHY1, CCI0 master0 (so it answers on /dev/i2c-3 next to the wide IMX586 at
+0x1a and the EEPROM at 0x54), MCLK2 = tlmm gpio15, reset = tlmm gpio12,
+VDIG enable = tlmm gpio95, plus the PM8150 LDO17 3.1 V rail.
+
+The I2C address is a placeholder: the stock DT does not carry one and the module
+has never been powered on mainline.  0x10 is the usual Samsung default; if the
+probe fails, load the driver with keep_power=1 and scan /dev/i2c-3 (0x20 and 0x21
+are the next candidates) - the same procedure that found the tele OV8856 at 0x36.
+
+Signed-off-by: Winter21c <winter@localhost>
+---
+--- a/arch/arm64/boot/dts/qcom/sm8150-xiaomi-raphael.dts
++++ b/arch/arm64/boot/dts/qcom/sm8150-xiaomi-raphael.dts
+@@ 	camera_vdig_tele: regulator-camera-vdig-tele {
+ 		vin-supply = <&vreg_bob>;
+ 	};
++
++	/* front module VDIG enable, stock DT CAMF_VDIG_EN */
++	camera_vdig_front: regulator-camera-vdig-front {
++		compatible = "regulator-fixed";
++		regulator-name = "camera_vdig_front";
++		regulator-min-microvolt = <1200000>;
++		regulator-max-microvolt = <1200000>;
++		enable-active-high;
++		gpio = <&tlmm 95 GPIO_ACTIVE_HIGH>;
++		vin-supply = <&vreg_bob>;
++	};
+@@ 		i2c-bus@0 {
+ 			reg = <0>;
+ 			clock-frequency = <400000>;
++
++			/* front camera: S5K3T2, CSIPHY1, MCLK2 gpio15,
++			 * reset gpio12, VDIG_EN gpio95 */
++			s5k3t2_front: camera@10 {
++				compatible = "samsung,s5k3t2";
++				reg = <0x10>;
++				reset-gpios = <&tlmm 12 GPIO_ACTIVE_LOW>;
++				clocks = <&camcc CAM_CC_MCLK2_CLK>;
++				clock-names = "xvclk";
++				assigned-clocks = <&camcc CAM_CC_MCLK2_CLK>;
++				assigned-clock-rates = <19200000>;
++
++				avdd-supply = <&vreg_bob>;
++				dovdd-supply = <&camera_viodd_ldo>;
++				dvdd-supply = <&camera_vdig_front>;
++				vl17-supply = <&vreg_l17a_3p0>;
++				status = "okay";
++			};
+ 		};

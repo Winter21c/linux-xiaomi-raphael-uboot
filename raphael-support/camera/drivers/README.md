@@ -115,3 +115,28 @@ Two things to verify on the first boot with it:
    calculation assume a specific INCK.  `assigned-clock-rates` is set to 24 MHz
    here; if the probe fails at the chip-id step, try 19.2 MHz (the rate the stock
    DT uses for every camera) before suspecting the register tables.
+
+
+## S5K3T2 bring-up driver (`s5k3t2.c`, 282 lines, not compiled yet)
+
+No register table exists for the front sensor, so this driver is honest about
+scope: it runs the module's power sequence, drives MCLK2 and the reset pad, reads
+the Samsung chip-id register (16-bit `0x0000`, the convention S5KJN1 uses with id
+0x38e1 and S5K3M5 with 0x3001) and registers a V4L2 subdevice so the sensor can be
+identified and linked into the media graph.
+
+It refuses to stream (`s_stream(1)` returns -EINVAL) instead of pretending, so a
+userspace attempt fails loudly rather than producing a black frame.
+
+Module parameters:
+
+| parameter | effect |
+|---|---|
+| `expect_id=N` | require the measured chip id; `-1` (default) just logs it |
+| `keep_power=1` | leave rails + MCLK up after probe, for CCI scans |
+
+`patches/0009-dts-s5k3t2-node.patch` adds `camera_vdig_front` (gpio95) and the
+`samsung,s5k3t2` node at 0x10 on `i2c-bus@0`.  The address is a placeholder: the
+stock DT carries none and the module has never been powered on mainline, so the
+first run should use `keep_power=1` and scan `/dev/i2c-3` (0x20/0x21 next
+candidates) exactly like the tele module was found at 0x36.
