@@ -1,0 +1,67 @@
+From: Winter21c <winter@localhost>
+Subject: arm64: dts: qcom: sm8150-xiaomi-raphael: front camera power + probe node
+
+The stock camera DT labels `qcom,cam-sensor@2` with CAMF_RESET/CAMF_VDIG_EN, so
+the front module sits on CSIPHY1, CCI0 master 0 (i2c-3), MCLK2 = tlmm gpio15,
+reset = tlmm gpio12 and its VDIG enable = tlmm gpio95, with viodd + BOB + S8 +
+L17 as supplies.
+
+Add the missing fixed regulator for the gpio95 enable and a probe node on the
+first CCI bus so the sensor can be powered and identified from userspace.  The
+node borrows a known driver only to run a power sequence; `keep_power=1` leaves
+the rails and MCLK up so the real address can be found by scanning, exactly the
+method that located the tele OV8856 at 0x36.
+
+Deliberately no `regulator-always-on` anywhere: the camera rails must only be up
+while a driver/user asks for them (see the two boot bricks caused by the PMIC
+rails).
+
+Not tested yet - it was written while the phone was wedged after the async-link
+experiment of round 19.
+
+Signed-off-by: Winter21c <winter@localhost>
+---
+--- a/arch/arm64/boot/dts/qcom/sm8150-xiaomi-raphael.dts
++++ b/arch/arm64/boot/dts/qcom/sm8150-xiaomi-raphael.dts
+@@
+ 	camera_vdig_tele: regulator-camera-vdig-tele {
+ 		compatible = "regulator-fixed";
+ 		regulator-name = "camera_vdig_tele";
+ 		regulator-min-microvolt = <1352000>;
+ 		regulator-max-microvolt = <1352000>;
+ 		enable-active-high;
+ 		gpio = <&tlmm 93 GPIO_ACTIVE_HIGH>;
+ 		vin-supply = <&vreg_bob>;
+ 	};
++
++	/* front module VDIG enable, stock DT CAMF_VDIG_EN */
++	camera_vdig_front: regulator-camera-vdig-front {
++		compatible = "regulator-fixed";
++		regulator-name = "camera_vdig_front";
++		regulator-min-microvolt = <1200000>;
++		regulator-max-microvolt = <1200000>;
++		enable-active-high;
++		gpio = <&tlmm 95 GPIO_ACTIVE_HIGH>;
++		vin-supply = <&vreg_bob>;
++	};
+@@ i2c-bus@0 {
+ 		i2c-bus@0 {
+ 			reg = <0>;
++
++			/* front module: CSIPHY1, MCLK2 gpio15, reset gpio12,
++			 * VDIG_EN gpio95.  Address is a placeholder until the
++			 * scan finds the real one. */
++			camera_front: camera@10 {
++				compatible = "ovti,ov8856";
++				reg = <0x10>;
++				reset-gpios = <&tlmm 12 GPIO_ACTIVE_LOW>;
++				clocks = <&camcc CAM_CC_MCLK2_CLK>;
++				clock-names = "xvclk";
++				assigned-clocks = <&camcc CAM_CC_MCLK2_CLK>;
++				assigned-clock-rates = <19200000>;
++				avdd-supply = <&vreg_bob>;
++				dovdd-supply = <&camera_viodd_ldo>;
++				dvdd-supply = <&camera_vdig_front>;
++				vl17-supply = <&vreg_l17a_3p0>;
++				status = "okay";
++			};

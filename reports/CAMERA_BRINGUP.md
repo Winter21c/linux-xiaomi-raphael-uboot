@@ -13,10 +13,17 @@ the phone (`/vendor/lib64/camera/com.qti.sensor.*_raphael.so`,
 
 | module | sensor | csiphy | cci device/master | MCLK pad | reset | vdig enable | extra rails |
 |---|---|---|---|---|---|---|---|
-| wide | IMX586 | 0 | 0 / 0 | gpio13 | gpio28 | gpio90 | SMPS5 2.0 V + L17 3.1 V |
-| tele | OV8856 | 2 | 0 / 1 | gpio14 | gpio30 | gpio93 | L17 3.1 V |
-| ultrawide | S5K3L6 | 1 | 0 / 0 | gpio15 | gpio12 | gpio95 | gpio31/32 |
-| front | S5K3T2 | 3 | 1 / 0 | gpio16 | gpio23 | gpio34 | - |
+| wide | IMX586 | 0 | 0 / 0 | gpio13 (MCLK0) | gpio28 | gpio90 | SMPS5 2.0 V + L17 3.1 V |
+| tele | OV8856 | 2 | 0 / 1 | gpio14 (MCLK1) | gpio30 | gpio93 | L17 3.1 V |
+| front | S5K3T2 | 1 | 0 / 0 | gpio15 (MCLK2) | gpio12 | gpio95 | L17 3.1 V |
+| ultrawide | S5K3L6 | 3 | **1** / 0 | gpio16 (MCLK3) | gpio23 | gpio34 | L17 3.1 V |
+
+Correction: the stock DT labels `qcom,cam-sensor@2` with `CAMF_RESET`/`CAMF_VDIG_EN`
+(front) and `@3` with `CAMU_*` (ultrawide), so the front camera is on **CSIPHY1 /
+CCI0 master0 / MCLK2 (gpio15) / reset gpio12 / vdig enable gpio95**, and the
+ultrawide is on CSIPHY3 / **CCI1** master0 / MCLK3 (gpio16) / reset gpio23 /
+vdig enable gpio34.  CCI1 (i2c@ac4b000) is not registered yet, so the ultrawide
+is not reachable until our DT enables the second CCI controller.
 
 Common rails: `cam_vio` = camera_viodd_ldo 1.8 V, `cam_vana` = PM8150L BOB
 3.008-4.0 V, `cam_vdig` = PM8150L S8 1.352 V.

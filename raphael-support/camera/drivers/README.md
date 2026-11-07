@@ -1,0 +1,45 @@
+# Sensor drivers for the raphael camera bring-up
+
+| driver | source | license | state |
+|---|---|---|---|
+| `ov8856.c` | in-tree mainline `drivers/media/i2c/ov8856.c` + our patches 0004/0005 | GPL-2.0 | **binds** on the tele module at CCI0 master1 0x36 |
+| `imx586-rpi-6.1.c` | https://github.com/youjunl/imx586-v4l2-driver (MIT repo, driver GPL-2.0), based on OCTOPUSCINEMA/soho/Will WHANG work, itself derived from the RPi `imx477` driver | GPL-2.0 | **not ported yet** |
+| S5K3L6 (ultrawide) | - | - | no public source found |
+| S5K3T2 (front) | - | - | no public source found |
+
+## Why this file is here
+
+`imx586-rpi-6.1.c` is a complete V4L2 driver for the IMX586 (2037 lines, mode
+tables + `mode_common_regs` init sequence, chip id 0x30dc == 0x32, 12-bit linear
+and Clear-HDR modes).  Mainline has no IMX586 driver, so this is the only known
+open source with the register tables the wide camera needs.
+
+It targets kernel 6.1 (Raspberry Pi tree).  It already uses
+`struct v4l2_subdev_state` and pm_runtime, so it should be close to our 7.3 tree;
+the port work is:
+
+1. build it as `obj-m` against the device's kernel headers and fix whatever the
+   7.3 API moved (`.s_stream` is deprecated but still supported; check
+   `v4l2_subdev_get_try_format` and `media_entity_pads_init` signatures),
+2. teach it our supplies: `dovdd`/`avdd`/`dvdd` plus the optional `vs5`/`vl17`
+   rails the wide module needs (same pattern as patch 0005 for ov8856),
+3. device tree: node at CCI0 master0 address **0x1a** (measured, not the stock
+   DT's assumption), `clock-names = "xvclk"`, MCLK0 (gpio13), reset gpio28,
+   `dvdd-supply = <&camera_vdig_wide>` (gpio90 enable), `vs5-supply`/`vl17-supply`,
+   and link-frequencies matching CSIPHY0,
+4. verify the chip id read (0x30dc == 0x32) proves the sensor is alive, then try
+   a single 4056x3040 mode.
+
+## Missing register tables for the other two sensors
+
+Neither Xiaomi's public kernels (`MiCode/Xiaomi_Kernel_OpenSource` branches
+`raphael-p-oss`, `cepheus-q-oss`), nor LineageOS'
+`android_kernel_xiaomi_sm8150`, nor `Butterfingerss/Kernel_xiaomi_raphael`
+contain the vendor per-sensor drivers - their camera directories hold only the
+framework (`camera_v2/sensor/{cci,csid,csiphy,eeprom,flash,io,...}`), and the
+tree searches for `imx586`, `ov8856`, `s5k3l6`, `s5k3t2` return zero hits.
+So for S5K3L6 and S5K3T2 there is no public register-table source; the remaining
+options are (a) the phone's own vendor partition if the camera drivers shipped as
+modules (`/vendor/lib/modules/`), or (b) writing power/ID-only drivers and
+discovering modes from the sensor's behaviour - recorded as a blocker, not an
+assumption.

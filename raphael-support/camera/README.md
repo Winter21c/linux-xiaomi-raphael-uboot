@@ -530,3 +530,43 @@ Next hypotheses to test, cheapest first:
 3. if it still wedges, the deadlock is inside the notifier completion path
    (sensor probe -> runtime PM -> CSIPHY link) and needs the `dev_info` trail in
    `camss_parse_ports`/`camss_async_bound` to localise.
+
+
+## Front camera (S5K3T2): what is known and what is missing
+
+Stock DT `qcom,cam-sensor@2` carries `CAMF_RESET`/`CAMF_VDIG_EN`, i.e. the front
+module is:
+
+* CSIPHY **1**, CCI0 **master 0** -> it answers on `/dev/i2c-3`, the same bus as
+  the wide IMX586 (0x1a) and the camera EEPROM (0x54),
+* MCLK **2** = tlmm gpio15, reset = tlmm gpio12, VDIG enable = tlmm gpio95,
+* supplies: viodd 1.8 V, BOB 3.008-4.0 V, S8 1.352 V and L17 3.1 V.
+
+No public driver source exists for the S5K3T2: Xiaomi's `raphael-p-oss` and
+`cepheus-q-oss` kernels, LineageOS' `android_kernel_xiaomi_sm8150` and
+`Butterfingerss/Kernel_xiaomi_raphael` all ship only the camera framework
+(`camera_v2/sensor/{cci,csid,csiphy,eeprom,flash,io}`), and searching the trees
+for `s5k3t2`/`s5k3l6`/`imx586`/`ov8856` returns zero files.  GitHub has no
+repository or file with an S5K3T2 driver either.
+
+The plan that does not need a register table first:
+
+1. `patches/0006-dts-front-camera-power.patch` adds `camera_vdig_front` (gpio95)
+   and a probe node on `i2c-bus@0` that borrows a known driver purely to run a
+   power sequence (MCLK2 + reset gpio12 + gpio95 + L17),
+2. load it with `keep_power=1`, which leaves the rails and MCLK up,
+3. scan `/dev/i2c-3` for the address that appears next to 0x1a/0x54,
+4. read the Samsung chip-id register (0x0000, 2 bytes) to confirm it is an
+   ISOCELL part, then write a real driver modelled on mainline `s5k3jn1.c` /
+   `s5k3m5.c`, and use the vendor partition (`/vendor/lib/modules/`) as the only
+   remaining possible source of mode tables.
+
+## Wide camera (IMX586): a public driver exists
+
+`camera/drivers/imx586-rpi-6.1.c` is a complete IMX586 V4L2 driver (2037 lines,
+chip id 0x30dc == 0x32, full `mode_common_regs` init sequence plus per-mode
+register lists) published under GPL-2.0 by youjunl/OCTOPUSCINEMA/soho/Will WHANG,
+derived from the Raspberry Pi `imx477` driver.  Port plan is in
+`camera/drivers/README.md`.  The node must be on CCI0 master0 at **0x1a** (the
+address measured on the device) with `vs5-supply`/`vl17-supply` and
+`clock-names = "xvclk"`.
