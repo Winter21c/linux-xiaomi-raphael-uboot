@@ -221,3 +221,38 @@ raphael-camss: parse_ports -> 0
 Next: the sensors.  `i2c-qcom-cci` still needs work (it reported
 `CCI reset timeout` with the old overlapping register windows), then the OV8856
 node can be probed and its chip ID read.
+
+
+## CCI transfers work (verified)
+
+The last missing piece for the CCI bus was **pinctrl**: neither the CCI pads nor
+the CAMCC MCLK pads were muxed, so the controller had no bus and the sensors had
+no clock.  The kernel's own tables give the answer:
+
+```
+function 20: cam_mclk, groups = [ gpio13 gpio14 gpio15 gpio16 ]
+function 22: cci_i2c,  groups = [ gpio17 gpio18 gpio19 gpio20 gpio31 .. gpio34 ]
+```
+
+Patch 0002 therefore adds `cci0` (gpio17/18), `cci1` (gpio19/20) and
+`cam_mclk0/1` (gpio13/14) states.  The MCLK states are hung off the **CCI node**
+instead of the sensor nodes on purpose: the driver core releases a sensor's
+pinctrl state when its probe fails, which would take the MCLK pads away again
+mid-scan.
+
+Evidence:
+
+```
+pin 17..20: device ac4a000.cci function cci_i2c group gpio17..20
+pin 13/14:  device ac4a000.cci function cam_mclk group gpio13/gpio14
+/dev/i2c-3 scan: 0x54 ACK      # first successful CCI transfer
+```
+
+With `keep_power=1` on the ov8856 driver the rails and the MCLK stay on
+(`camera_viodd`, `camera_vdig_wide/tele`, `cam_cc_mclk0/1_clk` all report one
+user), yet **no sensor answers at any address 0x08-0x77 on either master** -
+only the device at 0x54 (most likely the camera EEPROM).  So the remaining
+question is sensor power/address, not the CCI path.
+
+Tools used (in `tools/`): `i2cprobe8.c` (8-bit register probe), `i2cprobe16.c`
+(16-bit register probe), `gpioset.c` (GPIO v2 char device helper).

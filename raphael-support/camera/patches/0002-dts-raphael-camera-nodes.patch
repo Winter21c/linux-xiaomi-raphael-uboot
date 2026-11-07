@@ -26,8 +26,8 @@ overlay crashes the OF property-change notifier.
 
 Signed-off-by: Winter21c <winter@localhost>
 ---
---- a/arch/arm64/boot/dts/qcom/sm8150-xiaomi-raphael.dts	2026-11-07 22:16:21.191756339 +0800
-+++ b/arch/arm64/boot/dts/qcom/sm8150-xiaomi-raphael.dts	2026-11-07 22:16:21.192801926 +0800
+--- a/arch/arm64/boot/dts/qcom/sm8150-xiaomi-raphael.dts	2026-11-07 22:27:41.210360146 +0800
++++ b/arch/arm64/boot/dts/qcom/sm8150-xiaomi-raphael.dts	2026-11-07 22:27:41.211359682 +0800
 @@ -1390,3 +1390,312 @@
  		};
  	};
@@ -231,7 +231,11 @@ Signed-off-by: Winter21c <winter@localhost>
 +			      "cam_ahb_clk";
 +
 +		pinctrl-names = "default";
-+		pinctrl-0 = <&cci0_default &cci1_default>;
++		/* also hold the CAMCC MCLK pads muxed: the sensor drivers
++		 * release their own pinctrl state when a probe fails, and the
++		 * sensors then lose their clock. */
++		pinctrl-0 = <&cci0_default &cci1_default
++			     &cam_mclk0_default &cam_mclk1_default>;
 +
 +		#address-cells = <1>;
 +		#size-cells = <0>;
@@ -252,8 +256,6 @@ Signed-off-by: Winter21c <winter@localhost>
 +				reset-gpios = <&tlmm 28 GPIO_ACTIVE_LOW>;
 +				clocks = <&camcc CAM_CC_MCLK0_CLK>;
 +				clock-names = "xvclk";
-+				pinctrl-names = "default";
-+				pinctrl-0 = <&cam_mclk0_default>;
 +				assigned-clocks = <&camcc CAM_CC_MCLK0_CLK>;
 +				assigned-clock-rates = <19200000>;
 +
@@ -287,8 +289,6 @@ Signed-off-by: Winter21c <winter@localhost>
 +				reset-gpios = <&tlmm 30 GPIO_ACTIVE_LOW>;
 +				clocks = <&camcc CAM_CC_MCLK1_CLK>;
 +				clock-names = "xvclk";
-+				pinctrl-names = "default";
-+				pinctrl-0 = <&cam_mclk1_default>;
 +				assigned-clocks = <&camcc CAM_CC_MCLK1_CLK>;
 +				assigned-clock-rates = <19200000>;
 +
