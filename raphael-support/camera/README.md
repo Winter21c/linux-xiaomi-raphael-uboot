@@ -139,3 +139,17 @@ sudo ./test-camera.sh /root/camss-final/qcom-camss.ko
 which `insmod`s the module from `/root`, logs to `/root/camera-test.log`, and
 prints the media topology.  If the system wedges, follow `README-rescue.md`
 (`build-rescue.sh` + `fastboot boot`).
+
+
+## One-shot bring-up
+
+```
+# after a clean boot (camera DTB installed, no module under /lib/modules)
+sudo ./run-camera-bringup.sh /root/camss-final
+```
+
+It patches (0001 + 0003), builds against the running kernel, dumps the CAMCC
+clock state, reloads the CCI driver, `insmod`s camss from the source directory
+and prints the media topology.  A hardware watchdog is armed first, so a wedged
+probe resets the phone instead of leaving it stuck, and the log is written to
+`/root/camera-bringup.log`.
