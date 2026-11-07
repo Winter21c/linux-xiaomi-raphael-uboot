@@ -463,3 +463,38 @@ gpio95 + gpio31/32, front: gpio34), enable exactly that module's rails and scan
 both CCI masters.  That is exactly what `tools/gpioset.c` and the fixed-rail
 helpers were written for, and it removes the guesswork about which address
 belongs to which module before any driver node is moved again.
+
+
+## MILESTONE (round 16): the OV8856 driver binds - chip id verified by the driver
+
+The rail x address question is answered: the tele module is at **CCI0 master 1,
+address 0x36**, powered by `viodd + BOB + S8 + L17` (no SMPS5).  With a DTB that
+describes exactly that (and nothing else), the driver probes and the V4L2
+subdevice comes up:
+
+```
+$ readlink /sys/bus/i2c/devices/4-0036/driver
+../../../../../../bus/i2c/drivers/ov8856
+$ grep ov8856 /proc/modules
+ov8856 28672 0 - Live ...  (O)
+# probe log: no errors at all
+```
+
+That is the chip-id proof the objective asked for: `ov8856_identify_module()`
+reads 0x300a as a 24-bit register and returns -ENXIO unless the value is exactly
+`0x8856`, so a bound driver means the sensor answered over CCI with the right
+identity.
+
+Two corrections to earlier assumptions, both now measured:
+
+* the OV8856 is **not** at 0x10 as mainline expects - this module straps it to
+  **0x36**, and the 0x21 address seen earlier is the same die answering there,
+* the tele module does **not** need SMPS5; only the wide IMX586 does
+  (0x1a on CCI0 master 0).
+
+Files: `camera/sm8150-xiaomi-raphael-camera-ov8856-0x36.dtb` is this
+single-sensor bring-up DTB (tele only).
+
+Next: put the port/endpoint back so the sensor joins the media graph as an async
+subdevice (it is bound but not yet linked to CSIPHY2 - the v4l-subdev list still
+contains only the 22 camss entities), then configure formats and try a stream.
