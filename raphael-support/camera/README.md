@@ -425,3 +425,41 @@ Also note: the rebuilt `i2c-qcom-cci` is built from the *branch head* source, no
 from the running kernel's tree, because commit `195f3d74 "i2c: qcom-cci: Fix
 HALT_ACK reset request being dropped"` is not in the kernel that raphael-v7.3.0
 built on (c033da1fc4fe is 813 commits ahead / 161 behind the branch head).
+
+
+## Per-camera rail/address map (what is proven, what is not)
+
+Measured with the clean DTB, the rebuilt CCI and the ov8856 module carrying the
+optional rails (all rails on through `keep_power=1` on both nodes):
+
+```
+bus0 (CCI0 master 0): 0x1a ACK, 0x54 ACK
+bus1 (CCI0 master 1): 0x36 ACK, 0x21 ACK
+```
+
+Register reads over CCI (16-bit addressing, byte by byte):
+
+```
+bus1 0x36 : 0x300a=00 0x300b=88 0x300c=5a 0x3016=08 0x3017=10
+bus1 0x21 : 0x300a=00 0x300b=88 0x300c=5a 0x3016=08 0x3017=10   (identical)
+bus0 0x1a : 0x300a=02 0x300b=00 0x300c=00 0x3016=00 0x3017=00
+           0x0004=0aff 0x0008=0040
+```
+
+Two things follow:
+
+* the IDs are **not** what the stock device tree implies.  The wide IMX586 sits
+  on CCI0 master 0 at **0x1a** (a plausible Sony address), but the second bus
+  answers at **0x36 and 0x21 with identical data**, which is not the OV8856 at
+  0x10 that mainline expects,
+* and reading the same sensor through the driver still fails with EIO even after
+  moving the node to 0x36, because the driver then powers the node with the
+  *tele* rail set (gpio93 + L17) instead of the combination that was on during
+  the successful raw probes.
+
+So the correct next experiment is a **rail×address matrix**: for each of the four
+stock-described modules (wide: gpio90 + S5 + L17, tele: gpio93 + L17, ultra:
+gpio95 + gpio31/32, front: gpio34), enable exactly that module's rails and scan
+both CCI masters.  That is exactly what `tools/gpioset.c` and the fixed-rail
+helpers were written for, and it removes the guesswork about which address
+belongs to which module before any driver node is moved again.
