@@ -72,11 +72,17 @@ those exact uppercase names) mapped to `vreg_bob` / `camera_vdig_wide` /
 `camera_viodd_ldo`, plus `vs5-supply` / `vl17-supply`; then check the chip id
 (`0x30dc == 0x32`) and try one 4056x3040 mode.
 
-## The ultrawide (S5K3L6) is on CCI1, which this driver cannot reach
+## The ultrawide (S5K3L6) is on CCI1: reachable with a second CCI node
 
 `drivers/i2c/busses/i2c-qcom-cci.c` in our tree has `#define NUM_MASTERS 2` and
 maps `i2c-bus@<n>` to master `<n>`, so the single `cci@ac4a000` node exposes
 **CCI0 master0/master1 only** (`/dev/i2c-3`, `/dev/i2c-4`).  The ultrawide sits on
-**CCI1 master0** (i2c@ac4b000) and is therefore unreachable until either the
-driver supports four masters or a second CCI node is instantiated (which needs
-care: both nodes would map the shared `cci_top` region).
+**CCI1 master0** (i2c@ac4b000).
+
+`patches/0007-dts-second-cci-controller.patch` instantiates a second node for it.
+That is safe because the driver only uses **reg index 0** and **IRQ index 0**
+(`devm_platform_get_and_ioremap_resource(pdev, 0, ...)`, `platform_get_irq(pdev,
+0)`): it never touches `cci1`/`cci_top` from the first node's reg list, so there
+is no overlapping mem-region claim.  Once the node is in, CCI1's master0 shows up
+as an extra `Qualcomm-CCI` adapter and the ultrawide's address can be scanned for
+exactly like the tele module's.

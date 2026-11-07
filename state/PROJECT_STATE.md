@@ -205,3 +205,18 @@ RESUME HERE: after the power cycle, ssh in, then
 `base64`-free path: upload tools, run `camtest.sh sensor-first` (watchdog armed),
 and if it still wedges, run `camtest.sh camss-first`; check `journalctl -k` from
 the wedged boot for WCSS crash lines before blaming the camera path.
+
+
+## Round 21: offline deliverables added while the phone was wedged
+
+* `camera/patches/0007-dts-second-cci-controller.patch` - instantiate CCI1 so the
+  ultrawide (S5K3L6, CCI1 master0) becomes reachable.  Safe because the CCI
+  driver only uses reg index 0 and IRQ index 0, so a second node with its own
+  4 KiB window at 0xac4b000 + SPI 271 does not clash with the first node's reg
+  list (`cci1`/`cci_top` are never mapped by the driver).
+* `camera/drivers/imx586.c` - public RPi IMX586 driver ported offline to the 7.3
+  API (state accessors) plus optional `vs5`/`vl17` rails.
+* `tools/next-session.sh` - staged, watchdog-protected runner for the next
+  session: `recover`, `media-order`, `media-variantC`, `front-scan`,
+  `imx586-build`, `imx586-probe`.  Every risky stage arms the hardware watchdog
+  and then stops feeding it, so a userspace freeze reboots the phone by itself.

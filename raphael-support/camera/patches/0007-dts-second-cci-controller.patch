@@ -1,0 +1,62 @@
+From: Winter21c <winter@localhost>
+Subject: arm64: dts: qcom: sm8150-xiaomi-raphael: instantiate the second CCI controller
+
+The ultrawide module (stock DT `qcom,cam-sensor@3`, CAMU_*) is on **CCI1 master0**
+(i2c@ac4b000), but the single `cci@ac4a000` node with the sm8250-compatible
+binding exposes only CCI0's two masters (`/dev/i2c-3`, `/dev/i2c-4`), because
+`drivers/i2c/busses/i2c-qcom-cci.c` has `NUM_MASTERS 2` and maps
+`i2c-bus@<n>` to `cci->master[n]`.
+
+Adding a second node is clean: the driver only ever uses **reg index 0** and
+**IRQ index 0** (`devm_platform_get_and_ioremap_resource(pdev, 0, ...)` and
+`platform_get_irq(pdev, 0)`), so it never touches `cci_top`/`cci1` from the first
+node's reg list and there is no overlapping mem-region claim.  The new node
+therefore takes just its own 4 KiB window at 0xac4b000 and SPI 271, and exposes
+CCI1's masters as additional adapters - the ultrawide sits on CCI1 master0.
+
+Not tested yet: the phone was wedged while this was written (round 21).
+
+Signed-off-by: Winter21c <winter@localhost>
+---
+--- a/arch/arm64/boot/dts/qcom/sm8150-xiaomi-raphael.dts
++++ b/arch/arm64/boot/dts/qcom/sm8150-xiaomi-raphael.dts
+@@
+ 	cci: cci@ac4a000 {
+ 		compatible = "qcom,sm8250-cci";
+ 		reg = <0x0 0x0ac4a000 0x0 0x1000>,
+ 		      <0x0 0x0ac4b000 0x0 0x1000>,
+ 		      <0x0 0x0ac4e000 0x0 0x1000>;
+ 		reg-names = "cci0", "cci1", "cci_top";
+@@
+ 			};
+ 		};
+ 	};
++
++	/*
++	 * Second CCI controller.  The driver above maps only reg index 0, so it
++	 * never claims 0xac4b000 itself; a separate node with its own 4 KiB
++	 * window and its own IRQ is the way to reach CCI1 master0, where the
++	 * ultrawide (S5K3L6) lives.
++	 */
++	cci1: cci@ac4b000 {
++		compatible = "qcom,sm8250-cci";
++		reg = <0x0 0x0ac4b000 0x0 0x1000>;
++		interrupts = <GIC_SPI 271 IRQ_TYPE_EDGE_RISING>;
++		power-domains = <&camcc TITAN_TOP_GDSC>;
++		#address-cells = <1>;
++		#size-cells = <0>;
++		status = "okay";
++
++		pinctrl-names = "default";
++		pinctrl-0 = <&cci1_default>;
++
++		i2c-bus@0 {
++			reg = <0>;
++			clock-frequency = <400000>;
++			#address-cells = <1>;
++			#size-cells = <0>;
++
++			/* ultrawide S5K3L6: address has to be discovered by
++			 * scanning this bus once it is registered */
++		};
++	};
