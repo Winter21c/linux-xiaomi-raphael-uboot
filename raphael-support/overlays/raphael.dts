@@ -1,0 +1,63 @@
+/*
+ * Xiaomi Redmi K20 Pro (raphael) - mainline peripheral bring-up overlay
+ *
+ * Adds what the upstream sm8150-xiaomi-raphael device tree is still missing:
+ *   1. the GPI DMA instance of the QUP wrapper that hosts SE9 (geni-i2c needs it)
+ *   2. the NXP PN553 NFC controller on QUPv3 SE9 (i2c@a84000, address 0x28)
+ *   3. the PM8150B haptics peripheral (secondary SPMI die, address 0xc000)
+ *
+ * Phandle 0x55 is the TLMM pinctrl/gpio controller of the boot DTB (that DTB
+ * has no __symbols__, so numeric phandles are required).
+ *
+ * The overlay is applied at runtime by dtbo-loader, which also instantiates the
+ * platform devices for the nodes that it enables.  Nothing here modifies the
+ * boot DTB, so a broken overlay can never make the device unbootable.
+ */
+/dts-v1/;
+/plugin/;
+
+/ {
+	fragment@0 {
+		target-path = "/soc@0/dma-controller@a00000";
+
+		__overlay__ {
+			status = "okay";
+		};
+	};
+
+	fragment@1 {
+		target-path = "/soc@0/geniqup@ac0000/i2c@a84000";
+
+		__overlay__ {
+			status = "okay";
+			clock-frequency = <100000>;
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			nfc@28 {
+				compatible = "nxp,nxp-nci-i2c";
+				reg = <0x28>;
+				interrupt-parent = <0x55>;
+				interrupts = <47 4>;
+				enable-gpios = <0x55 103 0>;
+				firmware-gpios = <0x55 48 0>;
+				clock-frequency = <100000>;
+				status = "okay";
+			};
+		};
+	};
+
+	fragment@2 {
+		target-path = "/soc@0";
+
+		__overlay__ {
+			pm8150b-haptics {
+				compatible = "xiaomi,pm8150b-haptics";
+				spmi-usid = <3>;
+				reg-base = <0xc000>;
+				vmax-mv = <3000>;
+				status = "okay";
+			};
+		};
+	};
+};

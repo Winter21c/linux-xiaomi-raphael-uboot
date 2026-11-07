@@ -1,0 +1,17 @@
+[Unit]
+Description=Xiaomi Redmi K20 Pro peripheral bring-up (sensors, NFC, haptics)
+Documentation=https://github.com/GengWei1997/linux-xiaomi-raphael-uboot
+DefaultDependencies=no
+After=local-fs.target
+Before=hexagonrpcd.service iio-sensor-proxy.service multi-user.target
+Wants=hexagonrpcd.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/raphael-extras.sh
+RemainAfterExit=yes
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

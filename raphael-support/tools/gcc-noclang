@@ -1,0 +1,19 @@
+#!/bin/bash
+# Build kernel modules for a clang+LTO kernel using gcc, by dropping
+# compiler options gcc does not understand (self-healing retry loop).
+args=("$@" -fms-extensions)
+for f in -fms-anonymous-structs -fexperimental-late-parse-attributes -fsplit-lto-unit -flto=thin -Wthread-safety; do
+  filtered=()
+  for a in "${args[@]}"; do [ "$a" = "$f" ] || filtered+=("$a"); done
+  args=("${filtered[@]}")
+done
+for i in $(seq 1 40); do
+  out=$(gcc "${args[@]}" 2>&1); rc=$?
+  if [ $rc -eq 0 ]; then printf '%s' "$out"; exit 0; fi
+  bad=$(printf '%s\n' "$out" | grep -o "unrecognized command-line option [^ ]*" | head -1 | sed "s/.*option .//; s/.$//")
+  if [ -z "$bad" ]; then printf '%s' "$out"; exit $rc; fi
+  filtered=()
+  for a in "${args[@]}"; do [ "$a" = "$bad" ] || filtered+=("$a"); done
+  args=("${filtered[@]}")
+done
+printf '%s' "$out"; exit $rc

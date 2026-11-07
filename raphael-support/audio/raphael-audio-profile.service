@@ -1,0 +1,19 @@
+[Unit]
+Description=Raphael audio: select WirePlumber card profile and default sink
+After=raphael-extras.service user@1000.service sound.target
+Wants=raphael-extras.service
+
+[Service]
+Type=oneshot
+User=user
+Environment=XDG_RUNTIME_DIR=/run/user/1000
+Environment=RAPHAEL_USER=user
+ExecStart=/usr/local/sbin/raphael-audio-profile.sh
+RemainAfterExit=yes
+# The card may appear a little later, keep trying
+Restart=on-failure
+RestartSec=5
+StartLimitIntervalSec=0
+
+[Install]
+WantedBy=multi-user.target
