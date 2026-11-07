@@ -386,3 +386,42 @@ vreg_s4a_1p8, ts_avdd_3p3 (tlmm 98), ts_vddio_1p8 (tlmm 100)
 Rule for the future: build camera DTBs from `sm8150-xiaomi-raphael.dts.orig` +
 patch 0002 + the intended delta, never from a working file that may carry an old
 experiment, and grep the *compiled* DTB for `regulator-always-on` before flashing.
+
+
+## MILESTONE (round 14): the sensors answer on CCI
+
+With the clean DTB (patch 0002 + `vs5-supply`/`vl17-supply`), the rebuilt
+`i2c-qcom-cci` from the branch head (which carries the upstream HALT_ACK fix) and
+the ov8856 module carrying the optional rails, the CCI buses finally see the
+cameras:
+
+```
+write-probe /dev/i2c-3 : 0x1a ACK, 0x54 ACK          (CCI0 master 0)
+write-probe /dev/i2c-4 : 0x36 ACK, 0x21 ACK          (CCI0 master 1)
+```
+
+and the chip-id registers read back over CCI:
+
+```
+bus3 0x1a : 0x300a = 0x0200
+bus3 0x54 : EEPROM (0x300a reads 0xffff, reg 0x00 = 0x0101)
+bus4 0x36 : 0x300a = 0x0088     <- OV8856 chip-id high byte
+bus4 0x21 : 0x300a = 0x0088     <- second sensor behind the same value
+```
+
+So the rail work was the missing link: the wide/tele modules need the PM8150
+SMPS5 (2.0 V) and LDO17 (3.1 V) rails **in addition to** viodd/BOB/S8, and once
+they are on (through patch 0005's optional supplies) the sensors answer.
+
+What still has to happen: the device tree still describes the sensors at 0x10 on
+both buses, so the driver does not bind.  Next step is to move the nodes to the
+addresses that actually answer (0x1a on bus 0, 0x36 on bus 1), which needs one
+more DTB cycle, and then let the ov8856 driver print its own chip-id check.
+
+The DTB shipped here is `cam-clean` (747d08fd) - it boots (verified) and carries
+the two supplies.
+
+Also note: the rebuilt `i2c-qcom-cci` is built from the *branch head* source, not
+from the running kernel's tree, because commit `195f3d74 "i2c: qcom-cci: Fix
+HALT_ACK reset request being dropped"` is not in the kernel that raphael-v7.3.0
+built on (c033da1fc4fe is 813 commits ahead / 161 behind the branch head).
