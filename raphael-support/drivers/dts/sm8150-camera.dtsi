@@ -1,0 +1,120 @@
+/*
+ * SM8150 CAMSS / CSIPHY / CCI nodes for the Xiaomi Redmi K20 Pro (raphael).
+ *
+ * Translated from the stock Qualcomm device tree (sm8150-camera.dtsi and
+ * raphael-sm8150-camera-sensor.dtsi) into the mainline camss binding.
+ *
+ * This belongs in the kernel tree (arch/arm64/boot/dts/qcom/sm8150-xiaomi-raphael.dts),
+ * not in a runtime overlay: camss registers the whole media graph at probe time.
+ * The CSIPHY/CSID/VFE clock and timing tables still need validation on hardware.
+ */
+
+&soc {
+	camss: camss@ac00000 {
+		compatible = "qcom,sm8150-camss";
+		reg = <0x0 0x0ac00000 0x0 0x1000>,	/* CAMSS top */
+		      <0x0 0x0acb3000 0x0 0x1000>,	/* CSID0 */
+		      <0x0 0x0acba000 0x0 0x1000>,	/* CSID1 */
+		      <0x0 0x0acc8000 0x0 0x1000>,	/* CSID-LITE0 */
+		      <0x0 0x0accf000 0x0 0x1000>,	/* CSID-LITE1 */
+		      <0x0 0x0acaf000 0x0 0x4000>,	/* VFE0 */
+		      <0x0 0x0acb6000 0x0 0x4000>,	/* VFE1 */
+		      <0x0 0x0acc4000 0x0 0x4000>,	/* VFE-LITE0 */
+		      <0x0 0x0accb000 0x0 0x4000>,	/* VFE-LITE1 */
+		      <0x0 0x0ac65000 0x0 0x2000>,	/* CSIPHY0 */
+		      <0x0 0x0ac66000 0x0 0x2000>,	/* CSIPHY1 */
+		      <0x0 0x0ac67000 0x0 0x2000>,	/* CSIPHY2 */
+		      <0x0 0x0ac68000 0x0 0x2000>;	/* CSIPHY3 */
+		reg-names = "csi0", "csi1", "csi_lite0", "csi_lite1",
+			    "vfe0", "vfe1", "vfe_lite0", "vfe_lite1",
+			    "csiphy0", "csiphy1", "csiphy2", "csiphy3";
+
+		interrupts = <GIC_SPI 477 IRQ_TYPE_EDGE_RISING>,
+			     <GIC_SPI 478 IRQ_TYPE_EDGE_RISING>,
+			     <GIC_SPI 479 IRQ_TYPE_EDGE_RISING>,
+			     <GIC_SPI 480 IRQ_TYPE_EDGE_RISING>,
+			     <GIC_SPI 486 IRQ_TYPE_EDGE_RISING>,
+			     <GIC_SPI 487 IRQ_TYPE_EDGE_RISING>;
+		interrupt-names = "csid0", "csid1", "csid-lite0", "csid-lite1",
+				  "vfe0", "vfe1";
+
+		power-domains = <&camcc TITAN_TOP_GDSC>;
+
+		clocks = <&camcc CAM_CC_CPHY_RX_CLK_SRC>,
+			 <&camcc CAM_CC_CSIPHY0_CLK>,
+			 <&camcc CAM_CC_CSI0PHYTIMER_CLK>,
+			 <&camcc CAM_CC_CSIPHY1_CLK>,
+			 <&camcc CAM_CC_CSI1PHYTIMER_CLK>,
+			 <&camcc CAM_CC_CSIPHY2_CLK>,
+			 <&camcc CAM_CC_CSI2PHYTIMER_CLK>,
+			 <&camcc CAM_CC_CSIPHY3_CLK>,
+			 <&camcc CAM_CC_CSI3PHYTIMER_CLK>,
+			 <&camcc CAM_CC_CSID_CLK>,
+			 <&camcc CAM_CC_CSID_CSIPHY2_CLK>,
+			 <&camcc CAM_CC_CSID_CSIPHY3_CLK>,
+			 <&camcc CAM_CC_CSID_CSIPHY4_CLK>,
+			 <&camcc CAM_CC_CSIPHY_TIMER_CLK_SRC>;
+		clock-names = "cphy_rx_clk_src",
+			      "csiphy0", "csiphy0_timer",
+			      "csiphy1", "csiphy1_timer",
+			      "csiphy2", "csiphy2_timer",
+			      "csiphy3", "csiphy3_timer",
+			      "csid", "csid_csiphy2", "csid_csiphy3", "csid_csiphy4",
+			      "csiphy_timer_src";
+
+		status = "okay";
+	};
+
+	cci: cci@ac4a000 {
+		compatible = "qcom,sm8250-cci", "qcom,msm8996-cci";
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		reg = <0x0 0x0ac4a000 0x0 0x4000>,	/* CCI0 */
+		      <0x0 0x0ac4b000 0x0 0x4000>,	/* CCI1 */
+		      <0x0 0x0ac4e000 0x0 0x4000>;	/* CAMSS CCI top */
+		reg-names = "cci0", "cci1", "cci_top";
+
+		interrupts = <GIC_SPI 460 IRQ_TYPE_EDGE_RISING>,
+			     <GIC_SPI 461 IRQ_TYPE_EDGE_RISING>;
+		interrupt-names = "cci0", "cci1";
+
+		power-domains = <&camcc TITAN_TOP_GDSC>;
+
+		clocks = <&camcc CAM_CC_CCI_0_CLK>,
+			 <&camcc CAM_CC_CCI_1_CLK>,
+			 <&camcc CAM_CC_SLOW_AHB_CLK_SRC>;
+		clock-names = "cci0", "cci1", "camss_top_ahb";
+
+		status = "okay";
+
+		/*
+		 * Sensor nodes go here, one per module.  Only the OV8856 (rear
+		 * tele, CSIPHY2) has a mainline driver today; the IMX586,
+		 * S5K3L6 and S5K3T2 drivers still have to be written.
+		 */
+		ov8856: camera@10 {
+			compatible = "ovti,ov8856";
+			reg = <0x10>;
+
+			reset-gpios = <&tlmm 30 GPIO_ACTIVE_LOW>;	/* CAMT_RESET */
+			powerdown-gpios = <&tlmm 93 GPIO_ACTIVE_LOW>;	/* CAMT_VDIG_EN */
+
+			clocks = <&camcc CAM_CC_MCLK1_CLK>;
+			assigned-clocks = <&camcc CAM_CC_MCLK1_CLK>;
+			assigned-clock-rates = <19200000>;
+
+			avdd-supply = <&pm8150l_bob>;	/* 2.8 V */
+			dovdd-supply = <&camera_viodd_ldo>;	/* 1.8 V */
+			dvdd-supply = <&pm8150l_s8>;	/* 1.2 V */
+
+			port {
+				ov8856_ep: endpoint {
+					link-frequencies = /bits/ 64 <360000000 180000000>;
+					data-lanes = <1 2 3 4>;
+					remote-endpoint = <&csiphy2_ep>;
+				};
+			};
+		};
+	};
+};
