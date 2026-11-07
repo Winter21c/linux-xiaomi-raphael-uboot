@@ -86,3 +86,32 @@ That is safe because the driver only uses **reg index 0** and **IRQ index 0**
 is no overlapping mem-region claim.  Once the node is in, CCI1's master0 shows up
 as an extra `Qualcomm-CCI` adapter and the ultrawide's address can be scanned for
 exactly like the tele module's.
+
+
+## DT node for the wide camera (patch 0008)
+
+`patches/0008-dts-imx586-node.patch` adds `imx586_wide: camera@1a` on
+`i2c-bus@0` with:
+
+```
+compatible       = "sony,imx586"
+reg              = <0x1a>              measured address on CCI0 master0
+reset-gpios      = <&tlmm 28 GPIO_ACTIVE_LOW>
+clocks           = <&camcc CAM_CC_MCLK0_CLK>, clock-names = "xvclk"
+VANA-supply      = <&vreg_bob>           3.008-4.0 V
+VDIG-supply      = <&camera_vdig_wide>   S8 1.352 V through CAMW_VDIG_EN gpio90
+VDDL-supply      = <&camera_viodd_ldo>   1.8 V
+vs5-supply       = <&vreg_s5a_2p0>       PM8150 SMPS5 2.0 V
+vl17-supply      = <&vreg_l17a_3p0>      PM8150 LDO17 3.1 V
+endpoint -> csiphy0_ep, data-lanes 0-3
+```
+
+Two things to verify on the first boot with it:
+
+1. the driver's `imx586_get_regulators()` finds all five supplies (the three
+   uppercase names + vs5/vl17) - `regulator_summary` should show camera_viodd,
+   camera_vdig_wide, vreg_s5a_2p0 and vreg_l17a_3p0 with one user each,
+2. the MCLK rate: the driver's `link-frequencies` and its internal pixel-rate
+   calculation assume a specific INCK.  `assigned-clock-rates` is set to 24 MHz
+   here; if the probe fails at the chip-id step, try 19.2 MHz (the rate the stock
+   DT uses for every camera) before suspecting the register tables.

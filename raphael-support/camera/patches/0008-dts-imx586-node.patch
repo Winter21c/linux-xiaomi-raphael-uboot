@@ -1,0 +1,55 @@
+From: Winter21c <winter@localhost>
+Subject: arm64: dts: qcom: sm8150-xiaomi-raphael: wide IMX586 node on CCI0 master0
+
+The wide module answers at **0x1a on CCI0 master0** (measured, see
+evidence/raw/camera-cci-probe-rounds14-19.txt), not at the address the stock DT
+implies.  Its rails are viodd (1.8 V), BOB (3.008-4.0 V), S8 through the
+CAMW_VDIG_EN pad (gpio90), plus the PM8150 SMPS5 (2.0 V) and LDO17 (3.1 V) rails
+that only this module needs, its MCLK is MCLK0 (gpio13), reset is gpio28 and the
+CSI side is CSIPHY0.
+
+The driver imported in camera/drivers/imx586.c looks its supplies up by the
+uppercase names VANA/VDIG/VDDL, so the node uses exactly those property names.
+No `regulator-always-on` anywhere: the sensors stay unpowered until a driver or a
+test asks for them (two boot bricks came from forcing PMIC rail flags).
+
+Not tested yet - written while the phone was wedged (round 22).
+
+Signed-off-by: Winter21c <winter@localhost>
+---
+--- a/arch/arm64/boot/dts/qcom/sm8150-xiaomi-raphael.dts
++++ b/arch/arm64/boot/dts/qcom/sm8150-xiaomi-raphael.dts
+@@ 	cci: cci@ac4a000 {
+ 		i2c-bus@0 {
+ 			reg = <0>;
+ 			clock-frequency = <400000>;
++
++			/* wide camera: IMX586, CSIPHY0, MCLK0 gpio13,
++			 * reset gpio28, VDIG_EN gpio90 */
++			imx586_wide: camera@1a {
++				compatible = "sony,imx586";
++				reg = <0x1a>;
++				reset-gpios = <&tlmm 28 GPIO_ACTIVE_LOW>;
++				clocks = <&camcc CAM_CC_MCLK0_CLK>;
++				clock-names = "xvclk";
++				assigned-clocks = <&camcc CAM_CC_MCLK0_CLK>;
++				assigned-clock-rates = <24000000>;
++
++				/* names match camera/drivers/imx586.c */
++				VANA-supply = <&vreg_bob>;
++				VDIG-supply = <&camera_vdig_wide>;
++				VDDL-supply = <&camera_viodd_ldo>;
++				vs5-supply = <&vreg_s5a_2p0>;
++				vl17-supply = <&vreg_l17a_3p0>;
++
++				status = "okay";
++
++				port {
++					imx586_wide_ep: endpoint {
++						link-frequencies = /bits/ 64 <1800000000 900000000>;
++						data-lanes = <0 1 2 3>;
++						remote-endpoint = <&csiphy0_ep>;
++					};
++				};
++			};
+ 		};
