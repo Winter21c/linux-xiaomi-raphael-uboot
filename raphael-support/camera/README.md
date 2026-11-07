@@ -256,3 +256,32 @@ question is sensor power/address, not the CCI path.
 
 Tools used (in `tools/`): `i2cprobe8.c` (8-bit register probe), `i2cprobe16.c`
 (16-bit register probe), `gpioset.c` (GPIO v2 char device helper).
+
+
+## Ground truth: the stock camera device tree
+
+The vendor partition is still on the phone, and Xiaomi publishes the kernel tree, so
+the stock camera configuration can be read instead of guessed.
+`camera/reference/raphael-sm8150-camera-sensor.dtsi` (from
+`Butterfingerss/Kernel_xiaomi_raphael`, branch `14-dsp`) says:
+
+| camera | csiphy | cci device/master | MCLK pad | reset | vdig_en | extra rails |
+|---|---|---|---|---|---|---|
+| wide IMX586 (cell0) | 0 | cci0 / master 0 | gpio13 | gpio28 | gpio90 | **pm8150_s5 1904-2040 mV**, **pm8150_l17 3100 mV** |
+| tele OV8856 (cell1) | 2 | cci0 / master 1 | gpio14 | gpio30 | gpio93 | pm8150_l17 3100 mV |
+| front S5K3T2 (cell2) | ? | cci0 / master 0 | gpio15 | ? | ? | ? |
+
+Supplies always used: `cam_vio` = camera_viodd_ldo (1.8 V),
+`cam_vana` = pm8150l_bob (3.008-4.0 V), `cam_vdig` = pm8150l_s8 (1.352 V).
+
+That is the piece that was missing: the wide module additionally needs the PM8150
+**S5 (2.0 V)** and **L17 (3.1 V)** rails, which this port never enabled.  The
+initial attempt (fixed-regulator wrappers with `regulator-always-on` and
+`vin-supply = <&vreg_s5a_2p0> / <&vreg_l17a_3p0>`) registers
+`camera_vl17_3p1` but does not actually take the PMIC rail, so that still needs
+to be fixed properly (set the rail in the pm8150 regulator node itself, or drive
+it from a camera power helper).
+
+`camera/reference/raphael-pinctrl.dtsi` confirms the pad usage:
+`cam_sensor_active_wide` = gpio28 + gpio90, `cam_sensor_active_tele` = gpio30 +
+gpio93, both plain GPIO function.
