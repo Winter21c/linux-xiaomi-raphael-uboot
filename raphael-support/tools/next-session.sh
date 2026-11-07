@@ -9,7 +9,35 @@
 #   ./next-session.sh all               # run every stage in order
 set -u
 HERE=$(cd "$(dirname "$0")" && pwd)
-STAGES="recover media-order media-variantC front-scan imx586-build imx586-probe"
+STAGES="post-mortem preflight recover media-order media-variantC front-scan imx586-build imx586-probe"
+
+stage_post-mortem() {
+	# Decide WHY the previous boot froze: the modem WCSS crash loop and a camera
+	# deadlock produce the same signature (userspace frozen, kernel alive).
+	echo "=== previous boot: modem / crash evidence ==="
+	journalctl -k -b -1 --no-pager 2>/dev/null |
+		grep -iE "wcss|ccpm|srpll|remoteproc|crash detected|rcu|soft lockup|hung task|watchdog" |
+		tail -30
+	echo "=== previous boot: camera evidence ==="
+	journalctl -k -b -1 --no-pager 2>/dev/null |
+		grep -iE "camss|cci|ov8856|csiphy|media" | tail -20
+	echo "=== verdict hints ==="
+	echo "  WCSS/CCPM lines right before the end  -> modem crash loop came back"
+	echo "  only camss/ov8856 lines at the end     -> the async link is the culprit"
+	echo "  qcom_wdt / soft lockup                 -> the watchdog fired and rebooted"
+}
+
+stage_preflight() {
+	# never let a modem wedge masquerade as a camera failure
+	echo "modem state: $(cat /sys/class/remoteproc/remoteproc1/state 2>/dev/null)"
+	echo "guard unit : $(systemctl is-active raphael-stop-modem 2>/dev/null)"
+	if [ "$(cat /sys/class/remoteproc/remoteproc1/state 2>/dev/null)" != "offline" ]; then
+		echo "REFUSING to run camera tests with the modem running" >&2
+		return 1
+	fi
+	echo "uptime: $(uptime | sed 's/.*up //;s/,.*//')"
+	dmesg | tail -3
+}
 
 stage_recover() {
 	# restore the verified DTB + modules after any freeze
