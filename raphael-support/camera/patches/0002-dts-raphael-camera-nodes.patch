@@ -14,11 +14,17 @@ This is the proper fix (real phandles for CAMCC/GCC) - the runtime overlay can
 not be used because the CAMCC node carries no phandle and adding one through an
 overlay crashes the OF property-change notifier.
 
+* clock-names = "xvclk" is required or devm_clk_get() fails,
+* the per-module VDIG enable GPIOs (CAMW/CAMT/CAMF/CAMU_VDIG_EN) are modelled
+  as gpio regulators feeding dvdd,
+* link-frequencies must list every rate the sensor driver supports
+  (4 lane: 360M + 180M, 2 lane: 720M + 360M).
+
 Signed-off-by: Winter21c <winter@localhost>
 ---
---- a/arch/arm64/boot/dts/qcom/sm8150-xiaomi-raphael.dts	2026-11-07 18:10:29.302754553 +0800
-+++ b/arch/arm64/boot/dts/qcom/sm8150-xiaomi-raphael.dts	2026-11-07 18:10:29.303651258 +0800
-@@ -1390,3 +1390,249 @@
+--- a/arch/arm64/boot/dts/qcom/sm8150-xiaomi-raphael.dts	2026-11-07 22:01:59.140835619 +0800
++++ b/arch/arm64/boot/dts/qcom/sm8150-xiaomi-raphael.dts	2026-11-07 22:01:59.141894325 +0800
+@@ -1390,3 +1390,273 @@
  		};
  	};
  };
@@ -49,6 +55,28 @@ Signed-off-by: Winter21c <winter@localhost>
 +		enable-active-high;
 +		gpio = <&tlmm 97 GPIO_ACTIVE_HIGH>;
 +		vin-supply = <&vreg_bob>;
++	};
++
++	camera_vdig_wide: regulator-camera-vdig-wide {
++		compatible = "regulator-fixed";
++		regulator-name = "camera_vdig_wide";
++		regulator-min-microvolt = <1352000>;
++		regulator-max-microvolt = <1352000>;
++		regulator-enable-ramp-delay = <135>;
++		enable-active-high;
++		gpio = <&tlmm 90 GPIO_ACTIVE_HIGH>;
++		vin-supply = <&vreg_s8c_1p3>;
++	};
++
++	camera_vdig_tele: regulator-camera-vdig-tele {
++		compatible = "regulator-fixed";
++		regulator-name = "camera_vdig_tele";
++		regulator-min-microvolt = <1352000>;
++		regulator-max-microvolt = <1352000>;
++		regulator-enable-ramp-delay = <135>;
++		enable-active-high;
++		gpio = <&tlmm 93 GPIO_ACTIVE_HIGH>;
++		vin-supply = <&vreg_s8c_1p3>;
 +	};
 +};
 +
@@ -216,18 +244,19 @@ Signed-off-by: Winter21c <winter@localhost>
 +
 +				reset-gpios = <&tlmm 28 GPIO_ACTIVE_LOW>;
 +				clocks = <&camcc CAM_CC_MCLK0_CLK>;
++				clock-names = "xvclk";
 +				assigned-clocks = <&camcc CAM_CC_MCLK0_CLK>;
 +				assigned-clock-rates = <19200000>;
 +
 +				avdd-supply = <&vreg_bob>;
 +				dovdd-supply = <&camera_viodd_ldo>;
-+				dvdd-supply = <&vreg_s8c_1p3>;
++				dvdd-supply = <&camera_vdig_wide>;
 +
 +				status = "okay";
 +
 +				port {
 +					ov8856_wide_ep: endpoint {
-+						link-frequencies = /bits/ 64 <360000000>;
++						link-frequencies = /bits/ 64 <360000000 180000000>;
 +						data-lanes = <0 1 2 3>;
 +						remote-endpoint = <&csiphy0_ep>;
 +					};
@@ -248,18 +277,19 @@ Signed-off-by: Winter21c <winter@localhost>
 +
 +				reset-gpios = <&tlmm 30 GPIO_ACTIVE_LOW>;
 +				clocks = <&camcc CAM_CC_MCLK1_CLK>;
++				clock-names = "xvclk";
 +				assigned-clocks = <&camcc CAM_CC_MCLK1_CLK>;
 +				assigned-clock-rates = <19200000>;
 +
 +				avdd-supply = <&vreg_bob>;
 +				dovdd-supply = <&camera_viodd_ldo>;
-+				dvdd-supply = <&vreg_s8c_1p3>;
++				dvdd-supply = <&camera_vdig_tele>;
 +
 +				status = "okay";
 +
 +				port {
 +					ov8856_tele_ep: endpoint {
-+						link-frequencies = /bits/ 64 <360000000>;
++						link-frequencies = /bits/ 64 <720000000 360000000>;
 +						data-lanes = <0 1>;
 +						remote-endpoint = <&csiphy2_ep>;
 +					};

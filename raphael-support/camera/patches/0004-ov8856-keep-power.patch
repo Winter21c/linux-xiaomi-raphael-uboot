@@ -1,0 +1,39 @@
+From: Winter21c <winter@localhost>
+Subject: media: i2c: ov8856: add a keep_power bring-up parameter
+
+When the probe fails (no ACK from the sensor) the driver powers the rails down
+again, which makes it impossible to scan the CCI bus while the sensor is
+actually powered.  keep_power=1 leaves the regulators and the MCLK on so the
+bus can be probed with a user-space i2c scanner.
+
+Bring-up aid only, not intended for merging.
+
+Signed-off-by: Winter21c <winter@localhost>
+---
+--- a/drivers/media/i2c/ov8856.c	2026-11-07 22:02:12.416102182 +0800
++++ b/drivers/media/i2c/ov8856.c	2026-11-07 22:02:12.420149257 +0800
+@@ -103,6 +103,12 @@
+ 
+ #define to_ov8856(_sd)			container_of(_sd, struct ov8856, sd)
+ 
++/* bring-up aid: keep the sensor powered after a failed probe so the CCI bus can
++ * be scanned while the rails and MCLK are actually on */
++static bool keep_power;
++module_param(keep_power, bool, 0644);
++MODULE_PARM_DESC(keep_power, "keep the sensor powered after a failed probe");
++
+ static const char * const ov8856_supply_names[] = {
+ 	"dovdd",	/* Digital I/O power */
+ 	"avdd",		/* Analog power */
+@@ -2453,7 +2459,10 @@
+ 	mutex_destroy(&ov8856->mutex);
+ 
+ probe_power_off:
+-	ov8856_power_off(ov8856->dev);
++	if (!keep_power)
++		ov8856_power_off(ov8856->dev);
++	else
++		dev_info(ov8856->dev, "keep_power: leaving the sensor powered for CCI scans\n");
+ 
+ 	return ret;
+ }
