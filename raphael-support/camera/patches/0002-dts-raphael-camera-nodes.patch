@@ -16,9 +16,9 @@ overlay crashes the OF property-change notifier.
 
 Signed-off-by: Winter21c <winter@localhost>
 ---
---- a/arch/arm64/boot/dts/qcom/sm8150-xiaomi-raphael.dts	2026-11-07 17:35:34.138535282 +0800
-+++ b/arch/arm64/boot/dts/qcom/sm8150-xiaomi-raphael.dts	2026-11-07 17:35:34.139370177 +0800
-@@ -1390,3 +1390,243 @@
+--- a/arch/arm64/boot/dts/qcom/sm8150-xiaomi-raphael.dts	2026-11-07 18:10:29.302754553 +0800
++++ b/arch/arm64/boot/dts/qcom/sm8150-xiaomi-raphael.dts	2026-11-07 18:10:29.303651258 +0800
+@@ -1390,3 +1390,249 @@
  		};
  	};
  };
@@ -55,10 +55,10 @@ Signed-off-by: Winter21c <winter@localhost>
 +&soc {
 +	camss: camss@ac6a000 {
 +		compatible = "qcom,sm8150-camss";
-+		reg = <0x0 0x0ac65000 0x0 0x2000>,
-+		      <0x0 0x0ac66000 0x0 0x2000>,
-+		      <0x0 0x0ac67000 0x0 0x2000>,
-+		      <0x0 0x0ac68000 0x0 0x2000>,
++		reg = <0x0 0x0ac65000 0x0 0x1000>,
++		      <0x0 0x0ac66000 0x0 0x1000>,
++		      <0x0 0x0ac67000 0x0 0x1000>,
++		      <0x0 0x0ac68000 0x0 0x1000>,
 +		      <0x0 0x0acb3000 0x0 0x1000>,
 +		      <0x0 0x0acba000 0x0 0x1000>,
 +		      <0x0 0x0acc8000 0x0 0x1000>,
@@ -176,8 +176,8 @@ Signed-off-by: Winter21c <winter@localhost>
 +
 +	cci: cci@ac4a000 {
 +		compatible = "qcom,sm8250-cci";
-+		reg = <0x0 0x0ac4a000 0x0 0x4000>,
-+		      <0x0 0x0ac4b000 0x0 0x4000>,
++		reg = <0x0 0x0ac4a000 0x0 0x1000>,
++		      <0x0 0x0ac4b000 0x0 0x1000>,
 +		      <0x0 0x0ac4e000 0x0 0x1000>;
 +		reg-names = "cci0", "cci1", "cci_top";
 +
@@ -189,8 +189,14 @@ Signed-off-by: Winter21c <winter@localhost>
 +
 +		clocks = <&camcc CAM_CC_CCI_0_CLK>,
 +			 <&camcc CAM_CC_CCI_1_CLK>,
-+			 <&camcc CAM_CC_SLOW_AHB_CLK_SRC>;
-+		clock-names = "cci0", "cci1", "camss_top_ahb";
++			 <&camcc CAM_CC_SLOW_AHB_CLK_SRC>,
++			 <&camcc CAM_CC_FAST_AHB_CLK_SRC>,
++			 <&camcc CAM_CC_CPAS_AHB_CLK>,
++			 <&camcc CAM_CC_CORE_AHB_CLK>,
++			 <&gcc GCC_CAMERA_AHB_CLK>;
++		clock-names = "cci0", "cci1", "camss_top_ahb",
++			      "fast_ahb_src", "cpas_ahb", "core_ahb",
++			      "cam_ahb_clk";
 +
 +		#address-cells = <1>;
 +		#size-cells = <0>;
