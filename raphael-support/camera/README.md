@@ -172,3 +172,52 @@ Recommended sequence:
    CSIPHY/CSID/VFE entities (`media-ctl -p`),
 2. fix the CAMSS clock/power problem until that works,
 3. switch to the full DTB and get CCI (and then the OV8856 chip ID) working.
+
+
+## MILESTONE (verified on hardware)
+
+CAMSS **registers** on the Redmi K20 Pro with the mainline driver:
+
+```
+/dev/media0                                          # media device
+/sys/class/video4linux/video0..13                    # 14 VFE output nodes
+  video0-2   msm_vfe0_video0..2     (VFE0)
+  video3-5   msm_vfe1_video0..2     (VFE1)
+  video6-9   msm_vfe2_video0..3     (VFE lite0)
+  video10-13 msm_vfe3_video0..3     (VFE lite1)
+```
+
+and the CAMCC clocks are really taken:
+
+```
+cam_cc_ife_lite_0_csid_clk ... ac65000.camss  ife_lite_csid
+```
+
+Three more fixes were needed on top of the SM8150 tables (all in patch 0001):
+
+1. **power domains are optional** - attaching the TITAN_TOP GDSC by index can
+   fail; the probe now warns and continues with the GDSC state left by the
+   bootloader instead of failing with -ENOTCONN,
+2. **ports without a remote endpoint are skipped** - `camss_parse_ports()`
+   returned -ENOTCONN and killed the probe whenever a CSIPHY port had no
+   `remote-endpoint` (i.e. before any sensor is described),
+3. the CAMSS clock lookup by node path (see above).
+
+Bring-up log from the working load:
+
+```
+raphael-camss: probe begin (res ver 9)
+raphael-camss: icc_get -> 0
+raphael-camss: attaching top GDSC by id 2
+raphael-camss: configure_pd -> 0 (genpd_num 3)
+raphael-camss: init_subdevices -> 0
+raphael-camss: dma_set_mask -> 0
+raphael-camss: v4l2_device_register -> 0
+raphael-camss: port without remote endpoint, skipped   (x4)
+raphael-camss: parse_ports -> 0
+-> /dev/media0 and 14 video nodes
+```
+
+Next: the sensors.  `i2c-qcom-cci` still needs work (it reported
+`CCI reset timeout` with the old overlapping register windows), then the OV8856
+node can be probed and its chip ID read.

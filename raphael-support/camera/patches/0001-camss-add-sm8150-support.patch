@@ -17,15 +17,32 @@ crashes the property-change notifier chain (of_property_notify).  Resolve the
 CAMSS clocks by node path instead, and make the CAMSS power domains optional so
 the driver can probe on a board DT that cannot describe them.
 
-Build-tested on 7.3.0-rc5-sm8150-gc033da1fc4fe (clang + ThinLTO kernel, module
+Verified on hardware: /dev/media0 + 14 VFE video nodes register on
+raphael; CAMCC clocks are acquired (clk_summary shows ac65000.camss as
+consumer).  Build-tested on 7.3.0-rc5-sm8150-gc033da1fc4fe (clang + ThinLTO kernel, module
 built out of tree with gcc against the installed headers).
 
 Signed-off-by: Winter21c <winter@localhost>
 Reviewed-by: (pending hardware validation)
 ---
---- a/drivers/media/platform/qcom/camss/camss.c	2026-11-07 18:38:08.452836671 +0800
-+++ b/drivers/media/platform/qcom/camss/camss.c	2026-11-07 18:38:45.837323713 +0800
-@@ -5050,6 +5050,79 @@
+--- a/drivers/media/platform/qcom/camss/camss.c	2026-11-07 21:31:49.896986581 +0800
++++ b/drivers/media/platform/qcom/camss/camss.c	2026-11-07 21:32:00.176619384 +0800
+@@ -4803,6 +4803,14 @@
+ 						      typeof(*csd));
+ 		if (IS_ERR(csd)) {
+ 			ret = PTR_ERR(csd);
++			/* raphael bring-up: a port without a remote endpoint
++			 * (e.g. no sensor described yet) must not fail the
++			 * whole CAMSS probe. */
++			if (ret == -ENOTCONN) {
++				dev_dbg(dev, "port without remote endpoint, skipped\n");
++				ret = 0;
++				continue;
++			}
+ 			goto err_cleanup;
+ 		}
+ 
+@@ -5050,6 +5058,79 @@
   *
   * Return 0 on success or a negative error code on failure
   */
@@ -105,7 +122,7 @@ Reviewed-by: (pending hardware validation)
  static int camss_register_entities(struct camss *camss)
  {
  	int i;
-@@ -5241,8 +5314,12 @@
+@@ -5241,8 +5322,12 @@
  						      "power-domains",
  						      "#power-domain-cells");
  	if (camss->genpd_num < 0) {
@@ -120,7 +137,42 @@ Reviewed-by: (pending hardware validation)
  	}
  
  	/*
-@@ -5668,6 +5745,220 @@
+@@ -5285,12 +5370,22 @@
+ 		 */
+ 		camss->genpd = dev_pm_domain_attach_by_id(camss->dev,
+ 							  camss->genpd_num - 1);
+-		if (IS_ERR(camss->genpd))
+-			return PTR_ERR(camss->genpd);
++		if (IS_ERR(camss->genpd)) {
++			/* raphael bring-up: the CAMCC GDSC provider is not
++			 * attachable yet (-ENOTCONN).  Keep the state the
++			 * bootloader left and probe the subdevices anyway. */
++			dev_warn(dev, "power domain %d unavailable (%ld), continuing without genpd\n",
++				 camss->genpd_num - 1, PTR_ERR(camss->genpd));
++			camss->genpd = NULL;
++			camss->genpd_num = 0;
++			return 0;
++		}
+ 	}
+ 
+-	if (!camss->genpd)
+-		return -ENODEV;
++	if (!camss->genpd) {
++		camss->genpd_num = 0;
++		return 0;
++	}
+ 
+ 	camss->genpd_link = device_link_add(camss->dev, camss->genpd,
+ 					    DL_FLAG_STATELESS | DL_FLAG_PM_RUNTIME |
+@@ -5399,6 +5494,7 @@
+ 	if (!camss->vfe)
+ 		return -ENOMEM;
+ 
++
+ 	ret = camss_icc_get(camss);
+ 	if (ret < 0)
+ 		return ret;
+@@ -5668,6 +5764,220 @@
  	.vfe_num = ARRAY_SIZE(vfe_res_8250),
  };
  
@@ -341,7 +393,7 @@ Reviewed-by: (pending hardware validation)
  static const struct camss_resources sc8280xp_resources = {
  	.version = CAMSS_8280XP,
  	.pd_name = "top",
-@@ -5754,6 +6045,7 @@
+@@ -5754,6 +6064,7 @@
  	{ .compatible = "qcom,sdm845-camss", .data = &sdm845_resources },
  	{ .compatible = "qcom,sm6150-camss", .data = &sm6150_resources },
  	{ .compatible = "qcom,sm6350-camss", .data = &sm6350_resources },
@@ -349,8 +401,8 @@ Reviewed-by: (pending hardware validation)
  	{ .compatible = "qcom,sm8250-camss", .data = &sm8250_resources },
  	{ .compatible = "qcom,sm8550-camss", .data = &sm8550_resources },
  	{ .compatible = "qcom,sm8650-camss", .data = &sm8650_resources },
---- a/drivers/media/platform/qcom/camss/camss-csid.c	2026-11-07 18:38:08.452907028 +0800
-+++ b/drivers/media/platform/qcom/camss/camss-csid.c	2026-11-07 18:38:45.837444994 +0800
+--- a/drivers/media/platform/qcom/camss/camss-csid.c	2026-11-07 21:31:49.897083116 +0800
++++ b/drivers/media/platform/qcom/camss/camss-csid.c	2026-11-07 21:32:00.176721229 +0800
 @@ -1161,7 +1161,7 @@
  	for (i = 0; i < csid->nclocks; i++) {
  		struct camss_clock *clock = &csid->clock[i];
@@ -360,8 +412,8 @@ Reviewed-by: (pending hardware validation)
  		if (IS_ERR(clock->clk))
  			return PTR_ERR(clock->clk);
  
---- a/drivers/media/platform/qcom/camss/camss-csiphy.c	2026-11-07 18:38:08.452933539 +0800
-+++ b/drivers/media/platform/qcom/camss/camss-csiphy.c	2026-11-07 18:38:45.837469636 +0800
+--- a/drivers/media/platform/qcom/camss/camss-csiphy.c	2026-11-07 21:31:49.897114784 +0800
++++ b/drivers/media/platform/qcom/camss/camss-csiphy.c	2026-11-07 21:32:00.176749204 +0800
 @@ -655,7 +655,7 @@
  	for (i = 0; i < csiphy->nclocks; i++) {
  		struct camss_clock *clock = &csiphy->clock[i];
@@ -371,8 +423,8 @@ Reviewed-by: (pending hardware validation)
  		if (IS_ERR(clock->clk))
  			return PTR_ERR(clock->clk);
  
---- a/drivers/media/platform/qcom/camss/camss.h	2026-11-07 18:38:08.452985758 +0800
-+++ b/drivers/media/platform/qcom/camss/camss.h	2026-11-07 18:38:45.837427071 +0800
+--- a/drivers/media/platform/qcom/camss/camss.h	2026-11-07 21:31:49.897138352 +0800
++++ b/drivers/media/platform/qcom/camss/camss.h	2026-11-07 21:32:00.176701610 +0800
 @@ -163,6 +163,7 @@
  	void __iomem *(*get_base_address)(struct camss *camss, int id);
  };
@@ -381,8 +433,8 @@ Reviewed-by: (pending hardware validation)
  void camss_add_clock_margin(u64 *rate);
  int camss_enable_clocks(int nclocks, struct camss_clock *clock,
  			struct device *dev);
---- a/drivers/media/platform/qcom/camss/camss-vfe.c	2026-11-07 18:38:08.452955578 +0800
-+++ b/drivers/media/platform/qcom/camss/camss-vfe.c	2026-11-07 18:38:45.837494216 +0800
+--- a/drivers/media/platform/qcom/camss/camss-vfe.c	2026-11-07 21:31:49.897157472 +0800
++++ b/drivers/media/platform/qcom/camss/camss-vfe.c	2026-11-07 21:32:00.176776324 +0800
 @@ -1871,7 +1871,7 @@
  	for (i = 0; i < vfe->nclocks; i++) {
  		struct camss_clock *clock = &vfe->clock[i];
