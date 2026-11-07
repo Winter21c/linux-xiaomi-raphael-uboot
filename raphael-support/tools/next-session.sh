@@ -9,7 +9,7 @@
 #   ./next-session.sh all               # run every stage in order
 set -u
 HERE=$(cd "$(dirname "$0")" && pwd)
-STAGES="post-mortem preflight recover media-order media-variantC front-build front-scan ultra-scan imx586-build imx586-probe"
+STAGES="post-mortem preflight regress recover media-order media-variantC front-build front-scan ultra-scan imx586-build imx586-probe"
 
 stage_post-mortem() {
 	# Decide WHY the previous boot froze: the modem WCSS crash loop and a camera
@@ -37,6 +37,43 @@ stage_preflight() {
 	fi
 	echo "uptime: $(uptime | sed 's/.*up //;s/,.*//')"
 	dmesg | tail -3
+}
+
+stage_regress() {
+	# Objective requirement: a camera DTB change must not break the peripherals
+	# that were already verified (sensors, NFC, haptics, audio, modem guard).
+	local fail=0
+	echo "=== sensors (SDSP/ADSP via libssc) ==="
+	if [ -d /sys/bus/iio/devices ] && ls /sys/bus/iio/devices/iio:device* >/dev/null 2>&1; then
+		for d in /sys/bus/iio/devices/iio:device*; do
+			[ -f "$d/in_accel_x_raw" ] && echo "accel: $(cat "$d/name" 2>/dev/null) raw=$(cat "$d/in_accel_x_raw")"
+			[ -f "$d/in_illuminance_raw" ] && echo "light: $(cat "$d/name" 2>/dev/null) raw=$(cat "$d/in_illuminance_raw")"
+		done
+	else
+		echo "no iio devices"; fail=1
+	fi
+	echo "=== NFC (PN553 @ i2c SE9 0x28) ==="
+	if [ -e /sys/class/nfc/nfc0 ]; then echo "nfc0 present"; else echo "NFC MISSING"; fail=1; fi
+	echo "=== haptics (PM8150B) ==="
+	if grep -qi pm8150b_haptics /proc/bus/input/devices 2>/dev/null; then
+		echo "haptics input present"
+	else
+		echo "HAPTICS MISSING"; fail=1
+	fi
+	echo "=== audio (WCD9340 + TFA9874) ==="
+	if grep -qi sm8150_raphael /proc/asound/cards 2>/dev/null; then
+		echo "sound card: $(grep -i sm8150_raphael /proc/asound/cards | head -1 | tr -s ' ')"
+	else
+		echo "SOUND CARD MISSING"; fail=1
+	fi
+	grep -qi "headphone\|Headset" /proc/bus/input/devices 2>/dev/null &&
+		echo "jack input present" || echo "jack input missing (may load later)"
+	echo "=== modem guard ==="
+	echo "remoteproc1: $(cat /sys/class/remoteproc/remoteproc1/state 2>/dev/null)"
+	echo "guard unit : $(systemctl is-active raphael-stop-modem 2>/dev/null)"
+	echo "crash lines: $(dmesg | grep -ci 'crash detected')"
+	echo "=== verdict: $([ $fail -eq 0 ] && echo PASS || echo FAIL) ==="
+	return $fail
 }
 
 stage_recover() {
