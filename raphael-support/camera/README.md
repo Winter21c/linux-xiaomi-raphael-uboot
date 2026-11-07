@@ -308,3 +308,26 @@ camera DTB ever leaves the device unreachable:
 When touching the PMIC rails again, prefer enabling the rail lazily from a
 camera power helper (or via the sensor driver's supplies) instead of
 `regulator-always-on`, and change one rail at a time - one boot test per rail.
+
+
+## The right way to power the wide module (patch 0005, untested)
+
+Instead of forcing PMIC flags, patch 0005 teaches the OV8856 driver two optional
+supplies, `vs5` (PM8150 SMPS5, 2.0 V) and `vl17` (PM8150 LDO17, 3.1 V), and
+enables them in `power_on()` right before the reset sequence.  The board then
+only has to say:
+
+```
+avdd-supply  = <&vreg_bob>;        /* pm8150l BOB 3.008-4.0 V */
+dovdd-supply = <&camera_viodd_ldo>;/* 1.8 V */
+dvdd-supply  = <&camera_vdig_wide>;/* S8 1.352 V through CAMW_VDIG_EN */
+vs5-supply   = <&vreg_s5a_2p0>;    /* 2.0 V, camera-private use */
+vl17-supply  = <&vreg_l17a_3p0>;   /* 3.1 V, camera-private use */
+```
+
+with **no** `regulator-always-on` anywhere - the rails are only up while the
+sensor is streaming/probing, exactly like the stock camera stack does it.
+
+The patch has not been compiled or run yet (the phone became unreachable while
+it was written); the first thing to do after recovery is build it, load it and
+re-run the CCI scan with `keep_power=1`.

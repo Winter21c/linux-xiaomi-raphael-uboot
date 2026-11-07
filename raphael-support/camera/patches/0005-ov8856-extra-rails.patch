@@ -1,0 +1,92 @@
+From: Winter21c <winter@localhost>
+Subject: media: i2c: ov8856: support the raphael wide module's extra rails
+
+The Redmi K20 Pro wide camera is powered from three rails in addition to
+dovdd/avdd/dvdd: the PM8150 SMPS5 (2.0 V) and LDO17 (3.1 V) - see
+camera/reference/raphael-sm8150-camera-sensor.dtsi, where they are described as
+cam_v_custom1/cam_v_custom2 - and the module's own VDIG enable GPIO.
+
+Request "vs5" and "vl17" as optional supplies and enable them in power_on()
+before the reset sequence, so the board simply lists them in the sensor node.
+Other boards are unaffected because the supplies are optional.
+
+Not yet built or exercised on the device (the phone was unreachable when this
+was written): treat it as untested.
+
+Signed-off-by: Winter21c <winter@localhost>
+---
+--- a/drivers/media/i2c/ov8856.c	2026-11-07 22:51:41.594302652 +0800
++++ b/drivers/media/i2c/ov8856.c	2026-11-07 22:52:26.597940374 +0800
+@@ -109,6 +109,13 @@
+ 	"dvdd",		/* Digital core power */
+ };
+ 
++/* raphael: the wide module also needs the PM8150 S5 (2.0 V) and L17 (3.1 V)
++ * rails; they are optional so other boards keep working unchanged */
++static const char * const ov8856_extra_supply_names[] = {
++	"vs5",		/* 2.0 V rail */
++	"vl17",		/* 3.1 V rail */
++};
++
+ enum {
+ 	OV8856_MEDIA_BUS_FMT_SBGGR10_1X10,
+ 	OV8856_MEDIA_BUS_FMT_SGRBG10_1X10,
+@@ -1423,6 +1430,7 @@
+ 
+ 	struct clk		*xvclk;
+ 	struct gpio_desc	*reset_gpio;
++	struct regulator	*extra_rails[2];
+ 	struct regulator_bulk_data supplies[ARRAY_SIZE(ov8856_supply_names)];
+ 
+ 	/* V4L2 Controls */
+@@ -2080,7 +2088,7 @@
+ {
+ 	struct v4l2_subdev *sd = dev_get_drvdata(dev);
+ 	struct ov8856 *ov8856 = to_ov8856(sd);
+-	int ret;
++	int ret, i;
+ 
+ 	if (is_acpi_node(dev_fwnode(dev)))
+ 		return 0;
+@@ -2091,6 +2099,16 @@
+ 		return ret;
+ 	}
+ 
++	for (i = 0; i < ARRAY_SIZE(ov8856->extra_rails); i++) {
++		if (IS_ERR_OR_NULL(ov8856->extra_rails[i]))
++			continue;
++		ret = regulator_enable(ov8856->extra_rails[i]);
++		if (ret) {
++			dev_err(dev, "failed to enable extra rail %d: %d\n", i, ret);
++			goto disable_clk;
++		}
++	}
++
+ 	if (ov8856->reset_gpio) {
+ 		gpiod_set_value_cansleep(ov8856->reset_gpio, 1);
+ 		usleep_range(1000, 2000);
+@@ -2119,6 +2137,12 @@
+ {
+ 	struct v4l2_subdev *sd = dev_get_drvdata(dev);
+ 	struct ov8856 *ov8856 = to_ov8856(sd);
++	int i;
++
++	for (i = 0; i < ARRAY_SIZE(ov8856->extra_rails); i++) {
++		if (!IS_ERR_OR_NULL(ov8856->extra_rails[i]))
++			regulator_disable(ov8856->extra_rails[i]);
++	}
+ 
+ 	if (is_acpi_node(dev_fwnode(dev)))
+ 		return 0;
+@@ -2307,6 +2331,11 @@
+ 					      ov8856->supplies);
+ 		if (ret)
+ 			return ret;
++
++		for (i = 0; i < ARRAY_SIZE(ov8856->extra_rails); i++)
++			ov8856->extra_rails[i] =
++				devm_regulator_get_optional(dev,
++					ov8856_extra_supply_names[i]);
+ 	}
+ 
+ 	ep = fwnode_graph_get_next_endpoint(fwnode, NULL);
