@@ -38,6 +38,18 @@ fi
 echo "--- DTB camera nodes"
 ls /proc/device-tree/soc@0/ | grep -E "camss|cci" || echo "none (DTB without camera nodes)"
 
+echo "--- clock / power domain state (before)"
+if [ -r /sys/kernel/debug/clk/clk_summary ]; then
+	grep -iE "cam_cc|camcc" /sys/kernel/debug/clk/clk_summary | head -40
+else
+	echo "no clk_summary (debugfs not mounted or CONFIG_DEBUG_FS off)"
+fi
+if [ -d /sys/kernel/debug/pm_genpd ]; then
+	for g in /sys/kernel/debug/pm_genpd/*; do
+		echo "$(basename "$g"): $(cat "$g/status" 2>/dev/null)"
+	done | grep -iE "cam|titan|ife" | head -20
+fi
+
 echo "--- CCI driver"
 modprobe -r i2c-qcom-cci 2>/dev/null
 modprobe i2c-qcom-cci
@@ -49,6 +61,9 @@ echo "--- camss"
 insmod "$KO"
 sleep 4
 dmesg | grep -iE "camss|csiphy|csid|vfe" | tail -20
+echo "--- clock state (after)"
+grep -iE "cam_cc" /sys/kernel/debug/clk/clk_summary 2>/dev/null | head -40
+
 echo "--- media devices"
 ls -l /dev/media* /dev/video* 2>/dev/null
 echo "--- media topology"
