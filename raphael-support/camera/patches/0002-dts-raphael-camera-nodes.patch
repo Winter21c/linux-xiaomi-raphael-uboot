@@ -1,0 +1,264 @@
+From: Winter21c <winter@localhost>
+Subject: arm64: dts: qcom: sm8150-xiaomi-raphael: add camera nodes
+
+Describe the SM8150 CAMSS block, the CCI controller and the camera modules of
+the Redmi K20 Pro.  The register bases, GIC interrupt assignments, MCLK/reset/
+enable GPIOs and supplies come from the stock Android device tree of the
+device (sm8150-camera.dtsi and raphael-sm8150-camera-sensor.dtsi).
+
+Only the OV8856 has a mainline driver today; its node is used to prove the
+CCI/CSIPHY wiring by reading the chip ID.  The IMX586, S5K3L6 and S5K3T2
+drivers still have to be written.
+
+This is the proper fix (real phandles for CAMCC/GCC) - the runtime overlay can
+not be used because the CAMCC node carries no phandle and adding one through an
+overlay crashes the OF property-change notifier.
+
+Signed-off-by: Winter21c <winter@localhost>
+---
+--- a/arch/arm64/boot/dts/qcom/sm8150-xiaomi-raphael.dts	2026-11-07 17:35:34.138535282 +0800
++++ b/arch/arm64/boot/dts/qcom/sm8150-xiaomi-raphael.dts	2026-11-07 17:35:34.139370177 +0800
+@@ -1390,3 +1390,243 @@
+ 		};
+ 	};
+ };
++
++/*
++ * Camera support.
++ *
++ * The stock Android device tree describes four modules:
++ *
++ *   module            CSIPHY  CCI/master  MCLK       reset      VDIG_EN
++ *   rear wide  48MP      0     0 / 0      CAM_CC_MCLK0  gpio28   gpio90
++ *   rear tele   8MP      2     0 / 1      CAM_CC_MCLK1  gpio30   gpio93
++ *   rear wide  13MP      1     0 / 0      CAM_CC_MCLK2  gpio12   gpio95
++ *   front popup 20MP     3     1 / 0      CAM_CC_MCLK3  gpio23   gpio34
++ *
++ * Only the OV8856 has a mainline driver today, so its node is used to prove the
++ * CCI/CSIPHY wiring by reading the chip ID.  The other modules need drivers
++ * (IMX586 / S5K3L6 / S5K3T2).
++ */
++
++/ {
++	camera_viodd_ldo: regulator-camera-viodd {
++		compatible = "regulator-fixed";
++		regulator-name = "camera_viodd";
++		regulator-min-microvolt = <1800000>;
++		regulator-max-microvolt = <1800000>;
++		regulator-enable-ramp-delay = <135>;
++		enable-active-high;
++		gpio = <&tlmm 97 GPIO_ACTIVE_HIGH>;
++		vin-supply = <&vreg_bob>;
++	};
++};
++
++&soc {
++	camss: camss@ac6a000 {
++		compatible = "qcom,sm8150-camss";
++		reg = <0x0 0x0ac65000 0x0 0x2000>,
++		      <0x0 0x0ac66000 0x0 0x2000>,
++		      <0x0 0x0ac67000 0x0 0x2000>,
++		      <0x0 0x0ac68000 0x0 0x2000>,
++		      <0x0 0x0acb3000 0x0 0x1000>,
++		      <0x0 0x0acba000 0x0 0x1000>,
++		      <0x0 0x0acc8000 0x0 0x1000>,
++		      <0x0 0x0accf000 0x0 0x1000>,
++		      <0x0 0x0acaf000 0x0 0x4000>,
++		      <0x0 0x0acb6000 0x0 0x4000>,
++		      <0x0 0x0acc4000 0x0 0x4000>,
++		      <0x0 0x0accb000 0x0 0x4000>;
++		reg-names = "csiphy0", "csiphy1", "csiphy2", "csiphy3",
++			    "csid0", "csid1", "csid2", "csid3",
++			    "vfe0", "vfe1", "vfe_lite0", "vfe_lite1";
++		interrupts = <GIC_SPI 477 IRQ_TYPE_EDGE_RISING>,
++			     <GIC_SPI 478 IRQ_TYPE_EDGE_RISING>,
++			     <GIC_SPI 479 IRQ_TYPE_EDGE_RISING>,
++			     <GIC_SPI 448 IRQ_TYPE_EDGE_RISING>,
++			     <GIC_SPI 464 IRQ_TYPE_EDGE_RISING>,
++			     <GIC_SPI 466 IRQ_TYPE_EDGE_RISING>,
++			     <GIC_SPI 468 IRQ_TYPE_EDGE_RISING>,
++			     <GIC_SPI 359 IRQ_TYPE_EDGE_RISING>,
++			     <GIC_SPI 465 IRQ_TYPE_EDGE_RISING>,
++			     <GIC_SPI 467 IRQ_TYPE_EDGE_RISING>,
++			     <GIC_SPI 469 IRQ_TYPE_EDGE_RISING>,
++			     <GIC_SPI 360 IRQ_TYPE_EDGE_RISING>;
++		interrupt-names = "csiphy0", "csiphy1", "csiphy2", "csiphy3",
++				  "csid0", "csid1", "csid2", "csid3",
++				  "vfe0", "vfe1", "vfe_lite0", "vfe_lite1";
++
++		power-domains = <&camcc TITAN_TOP_GDSC>,
++				<&camcc IFE_0_GDSC>,
++				<&camcc IFE_1_GDSC>;
++		power-domain-names = "top", "ife0", "ife1";
++
++		clocks = <&gcc GCC_CAMERA_AHB_CLK>,
++			 <&gcc GCC_CAMERA_HF_AXI_CLK>,
++			 <&gcc GCC_CAMERA_SF_AXI_CLK>,
++			 <&camcc CAM_CC_CAMNOC_AXI_CLK>,
++			 <&camcc CAM_CC_CAMNOC_AXI_CLK_SRC>,
++			 <&camcc CAM_CC_CORE_AHB_CLK>,
++			 <&camcc CAM_CC_CPAS_AHB_CLK>,
++			 <&camcc CAM_CC_SLOW_AHB_CLK_SRC>,
++			 <&camcc CAM_CC_CSIPHY0_CLK>,
++			 <&camcc CAM_CC_CSI0PHYTIMER_CLK>,
++			 <&camcc CAM_CC_CSIPHY1_CLK>,
++			 <&camcc CAM_CC_CSI1PHYTIMER_CLK>,
++			 <&camcc CAM_CC_CSIPHY2_CLK>,
++			 <&camcc CAM_CC_CSI2PHYTIMER_CLK>,
++			 <&camcc CAM_CC_CSIPHY3_CLK>,
++			 <&camcc CAM_CC_CSI3PHYTIMER_CLK>,
++			 <&camcc CAM_CC_IFE_0_CLK>,
++			 <&camcc CAM_CC_IFE_0_AXI_CLK>,
++			 <&camcc CAM_CC_IFE_0_CSID_CLK>,
++			 <&camcc CAM_CC_IFE_0_CPHY_RX_CLK>,
++			 <&camcc CAM_CC_IFE_1_CLK>,
++			 <&camcc CAM_CC_IFE_1_AXI_CLK>,
++			 <&camcc CAM_CC_IFE_1_CSID_CLK>,
++			 <&camcc CAM_CC_IFE_1_CPHY_RX_CLK>,
++			 <&camcc CAM_CC_IFE_LITE_0_CLK>,
++			 <&camcc CAM_CC_IFE_LITE_0_CSID_CLK>,
++			 <&camcc CAM_CC_IFE_LITE_0_CPHY_RX_CLK>;
++		clock-names = "cam_ahb_clk",
++			      "cam_hf_axi",
++			      "cam_sf_axi",
++			      "camnoc_axi",
++			      "camnoc_axi_src",
++			      "core_ahb",
++			      "cpas_ahb",
++			      "slow_ahb_src",
++			      "csiphy0", "csiphy0_timer",
++			      "csiphy1", "csiphy1_timer",
++			      "csiphy2", "csiphy2_timer",
++			      "csiphy3", "csiphy3_timer",
++			      "ife0", "ife0_axi", "ife0_csid", "ife0_cphy_rx",
++			      "ife1", "ife1_axi", "ife1_csid", "ife1_cphy_rx",
++			      "ife_lite", "ife_lite_csid", "ife_lite_cphy_rx";
++
++		status = "okay";
++
++		ports {
++			#address-cells = <1>;
++			#size-cells = <0>;
++
++			port@0 {
++				reg = <0>;
++				csiphy0_ep: endpoint {
++					clock-lanes = <7>;
++					data-lanes = <0 1 2 3>;
++				};
++			};
++
++			port@1 {
++				reg = <1>;
++				csiphy1_ep: endpoint {
++					clock-lanes = <7>;
++					data-lanes = <0 1 2 3>;
++				};
++			};
++
++			port@2 {
++				reg = <2>;
++				csiphy2_ep: endpoint {
++					clock-lanes = <7>;
++					data-lanes = <0 1>;
++				};
++			};
++
++			port@3 {
++				reg = <3>;
++				csiphy3_ep: endpoint {
++					clock-lanes = <7>;
++					data-lanes = <0 1>;
++				};
++			};
++		};
++	};
++
++	cci: cci@ac4a000 {
++		compatible = "qcom,sm8250-cci";
++		reg = <0x0 0x0ac4a000 0x0 0x4000>,
++		      <0x0 0x0ac4b000 0x0 0x4000>,
++		      <0x0 0x0ac4e000 0x0 0x1000>;
++		reg-names = "cci0", "cci1", "cci_top";
++
++		interrupts = <GIC_SPI 460 IRQ_TYPE_EDGE_RISING>,
++			     <GIC_SPI 271 IRQ_TYPE_EDGE_RISING>;
++		interrupt-names = "cci0", "cci1";
++
++		power-domains = <&camcc TITAN_TOP_GDSC>;
++
++		clocks = <&camcc CAM_CC_CCI_0_CLK>,
++			 <&camcc CAM_CC_CCI_1_CLK>,
++			 <&camcc CAM_CC_SLOW_AHB_CLK_SRC>;
++		clock-names = "cci0", "cci1", "camss_top_ahb";
++
++		#address-cells = <1>;
++		#size-cells = <0>;
++
++		status = "okay";
++
++		i2c-bus@0 {
++			reg = <0>;
++			#address-cells = <1>;
++			#size-cells = <0>;
++			clock-frequency = <400000>;
++
++			/* rear wide, 48 MP - needs an IMX586 driver */
++			ov8856_wide: camera@10 {
++				compatible = "ovti,ov8856";
++				reg = <0x10>;
++
++				reset-gpios = <&tlmm 28 GPIO_ACTIVE_LOW>;
++				clocks = <&camcc CAM_CC_MCLK0_CLK>;
++				assigned-clocks = <&camcc CAM_CC_MCLK0_CLK>;
++				assigned-clock-rates = <19200000>;
++
++				avdd-supply = <&vreg_bob>;
++				dovdd-supply = <&camera_viodd_ldo>;
++				dvdd-supply = <&vreg_s8c_1p3>;
++
++				status = "okay";
++
++				port {
++					ov8856_wide_ep: endpoint {
++						link-frequencies = /bits/ 64 <360000000>;
++						data-lanes = <0 1 2 3>;
++						remote-endpoint = <&csiphy0_ep>;
++					};
++				};
++			};
++		};
++
++		i2c-bus@1 {
++			reg = <1>;
++			#address-cells = <1>;
++			#size-cells = <0>;
++			clock-frequency = <400000>;
++
++			/* rear tele, 8 MP - OV8856 */
++			ov8856_tele: camera@10 {
++				compatible = "ovti,ov8856";
++				reg = <0x10>;
++
++				reset-gpios = <&tlmm 30 GPIO_ACTIVE_LOW>;
++				clocks = <&camcc CAM_CC_MCLK1_CLK>;
++				assigned-clocks = <&camcc CAM_CC_MCLK1_CLK>;
++				assigned-clock-rates = <19200000>;
++
++				avdd-supply = <&vreg_bob>;
++				dovdd-supply = <&camera_viodd_ldo>;
++				dvdd-supply = <&vreg_s8c_1p3>;
++
++				status = "okay";
++
++				port {
++					ov8856_tele_ep: endpoint {
++						link-frequencies = /bits/ 64 <360000000>;
++						data-lanes = <0 1>;
++						remote-endpoint = <&csiphy2_ep>;
++					};
++				};
++			};
++		};
++	};
++};

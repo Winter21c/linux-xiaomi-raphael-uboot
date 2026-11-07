@@ -3,20 +3,28 @@ Subject: media: camss: add SM8150 (Xiaomi Redmi K20 Pro) support
 
 SM8150 uses the CAMSS 480 / CSIPHY 3 nm block with four CSIPHYs, two CSIDs
 plus two CSID-lite, two VFE480 plus two VFE-lite, and the TITAN_TOP GDSC in
-CAMCC.  The GIC interrupt assignments match SM8250 for the first four
-CSIPHYs and for both CSIDs/VFEs (verified against the stock Android device
-tree of the device).
+CAMCC.  The GIC interrupt assignments match SM8250 for the first four CSIPHYs
+and for both CSIDs/VFEs (verified against the stock Android device tree of
+this device), and the register bases are:
+
+  CSIPHY0-3  0xac65000 0xac66000 0xac67000 0xac68000
+  CSID0/1    0xacb3000 0xacba000    CSID-lite0/1 0xacc8000 0xaccf000
+  VFE0/1     0xacaf000 0xacb6000    VFE-lite0/1  0xacc4000 0xaccb000
 
 The board device tree cannot reference the CAMCC clock controller by phandle:
 that node carries no phandle and adding one to a live tree through an overlay
-crashes the property-change notifier chain.  Resolve the CAMSS clocks by node
-path instead, and make the CAMSS power domains optional so the driver can
-probe on a board DT that cannot describe them.
+crashes the property-change notifier chain (of_property_notify).  Resolve the
+CAMSS clocks by node path instead, and make the CAMSS power domains optional so
+the driver can probe on a board DT that cannot describe them.
 
-Also add the resource tables (csiphy/csid/vfe), the compatible string and the
-clock lookup helper.
+Build-tested on 7.3.0-rc5-sm8150-gc033da1fc4fe (clang + ThinLTO kernel, module
+built out of tree with gcc against the installed headers).
 
+Signed-off-by: Winter21c <winter@localhost>
+Reviewed-by: (pending hardware validation)
 ---
+--- a/drivers/media/platform/qcom/camss/camss.c	2026-11-07 17:29:28.472669540 +0800
++++ b/drivers/media/platform/qcom/camss/camss.c	2026-11-07 17:29:28.473652928 +0800
 @@ -5050,6 +5050,74 @@
   *
   * Return 0 on success or a negative error code on failure
@@ -336,9 +344,8 @@ clock lookup helper.
  	{ .compatible = "qcom,sm8250-camss", .data = &sm8250_resources },
  	{ .compatible = "qcom,sm8550-camss", .data = &sm8550_resources },
  	{ .compatible = "qcom,sm8650-camss", .data = &sm8650_resources },
-diff -u a/camss-csid.c b/camss-csid.c
---- a/camss-csid.c	2026-11-07 17:27:59.752490129 +0800
-+++ b/camss-csid.c	2026-11-07 17:27:59.753652857 +0800
+--- a/drivers/media/platform/qcom/camss/camss-csid.c	2026-11-07 17:29:28.472734990 +0800
++++ b/drivers/media/platform/qcom/camss/camss-csid.c	2026-11-07 17:29:28.473735738 +0800
 @@ -1161,7 +1161,7 @@
  	for (i = 0; i < csid->nclocks; i++) {
  		struct camss_clock *clock = &csid->clock[i];
@@ -348,9 +355,8 @@ diff -u a/camss-csid.c b/camss-csid.c
  		if (IS_ERR(clock->clk))
  			return PTR_ERR(clock->clk);
  
-diff -u a/camss-csiphy.c b/camss-csiphy.c
---- a/camss-csiphy.c	2026-11-07 17:27:59.752516490 +0800
-+++ b/camss-csiphy.c	2026-11-07 17:27:59.753680180 +0800
+--- a/drivers/media/platform/qcom/camss/camss-csiphy.c	2026-11-07 17:29:28.472759570 +0800
++++ b/drivers/media/platform/qcom/camss/camss-csiphy.c	2026-11-07 17:29:28.473762174 +0800
 @@ -655,7 +655,7 @@
  	for (i = 0; i < csiphy->nclocks; i++) {
  		struct camss_clock *clock = &csiphy->clock[i];
@@ -360,9 +366,8 @@ diff -u a/camss-csiphy.c b/camss-csiphy.c
  		if (IS_ERR(clock->clk))
  			return PTR_ERR(clock->clk);
  
-diff -u a/camss.h b/camss.h
---- a/camss.h	2026-11-07 17:27:59.752573668 +0800
-+++ b/camss.h	2026-11-07 17:27:59.753739074 +0800
+--- a/drivers/media/platform/qcom/camss/camss.h	2026-11-07 17:29:28.472808105 +0800
++++ b/drivers/media/platform/qcom/camss/camss.h	2026-11-07 17:29:28.473819152 +0800
 @@ -163,6 +163,7 @@
  	void __iomem *(*get_base_address)(struct camss *camss, int id);
  };
@@ -371,9 +376,8 @@ diff -u a/camss.h b/camss.h
  void camss_add_clock_margin(u64 *rate);
  int camss_enable_clocks(int nclocks, struct camss_clock *clock,
  			struct device *dev);
-diff -u a/camss-vfe.c b/camss-vfe.c
---- a/camss-vfe.c	2026-11-07 17:27:59.752539937 +0800
-+++ b/camss-vfe.c	2026-11-07 17:27:59.753703780 +0800
+--- a/drivers/media/platform/qcom/camss/camss-vfe.c	2026-11-07 17:29:28.472779352 +0800
++++ b/drivers/media/platform/qcom/camss/camss-vfe.c	2026-11-07 17:29:28.473788327 +0800
 @@ -1871,7 +1871,7 @@
  	for (i = 0; i < vfe->nclocks; i++) {
  		struct camss_clock *clock = &vfe->clock[i];

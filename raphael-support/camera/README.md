@@ -74,3 +74,53 @@ CAMCC          0x0ad00000      (already present and bound in the current DTB)
 4. Port an IMX586 driver (the sm8250 mainline tree has an out-of-tree IMX586
    driver that can be adapted) and wire it to CSIPHY0.
 5. Write the libcamera pipeline handler.
+
+
+## How the port is being done (updated)
+
+The runtime-overlay route hits a hard wall: the CAMCC node
+(`/soc@0/clock-controller@ad00000`) has **no phandle**, and adding one to a live
+tree through an overlay crashes the kernel inside the OF property-change
+notifier chain (`of_property_notify`).  Without that phandle the CAMSS/CCI and
+sensor nodes cannot reference their clocks or power domains.
+
+So the camera port uses the **boot device tree**:
+
+1. `patches/0001-camss-add-sm8150-support.patch` - CAMSS SM8150 support
+   (resource tables, compatible, optional power domains).  Build with
+   `build-camss.sh`, which compiles the module against
+   `/lib/modules/$(uname -r)/build`.
+2. `patches/0002-dts-raphael-camera-nodes.patch` - adds `camss@ac6a000`,
+   `cci@ac4a000` (with `i2c-bus@0/1` and OV8856 nodes) and the camera 1.8 V LDO
+   to `sm8150-xiaomi-raphael.dts`.  Build with `build-dtb.sh`; the result is
+   verified to contain the camera nodes and to reference the correct CAMCC/GCC
+   phandles.
+
+### Installing the DTB
+
+```
+# on the phone, as root
+cp /boot/dtbs/qcom/sm8150-xiaomi-raphael.dtb /boot/dtbs/qcom/sm8150-xiaomi-raphael.dtb.bak
+cp sm8150-xiaomi-raphael-camera.dtb /boot/dtbs/qcom/sm8150-xiaomi-raphael.dtb
+sync
+reboot
+```
+
+U-Boot prints `Using standard DTB` when it loads the file and falls back to its
+built-in legacy DTB (`!!! WARNING !!! Using legacy DTB`) when the file is
+missing, so a *missing* DTB is recoverable; a *corrupt* file is not - always
+verify the image with `dtc -I dtb` (the build script does) before copying it.
+The original DTB is also kept in the rootfs image, and the phone can always be
+re-flashed with `rootfs.img` via fastboot.
+
+### Expected results after the reboot
+
+```
+dmesg | grep -iE "camss|cci|ov8856"
+ls /dev/media*          # media device registered by camss
+i2cdetect -l            # Qualcomm-CCI adapters
+```
+
+The OV8856 driver reads its chip ID at probe time; a message like
+`ov8856 0-0010: chip ID 0x8856` proves that the CCI bus, the sensor supplies
+and the MCLK from CAMCC all work.
