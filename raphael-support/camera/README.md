@@ -153,3 +153,22 @@ clock state, reloads the CCI driver, `insmod`s camss from the source directory
 and prints the media topology.  A hardware watchdog is armed first, so a wedged
 probe resets the phone instead of leaving it stuck, and the log is written to
 `/root/camera-bringup.log`.
+
+
+## Bring-up order (why two DTB variants)
+
+`i2c-qcom-cci` and `qcom-camss` are independent drivers.  CCI is autoloaded by
+udev at boot and its probe currently fails/hangs (`CCI reset timeout`), which
+made it hard to tell whether a wedge comes from CCI or from CAMSS.  Two DTB
+builds are therefore provided:
+
+* `sm8150-xiaomi-raphael-camera.dtb` - camss **and** cci (the full target),
+* `sm8150-xiaomi-raphael-camss-only.dtb` - camss only, no `cci@ac4a000`, so
+  `/dev/media0` can be validated without the CCI block in the picture.
+
+Recommended sequence:
+
+1. boot the camss-only DTB, `insmod` the module, check `/dev/media0` and the
+   CSIPHY/CSID/VFE entities (`media-ctl -p`),
+2. fix the CAMSS clock/power problem until that works,
+3. switch to the full DTB and get CCI (and then the OV8856 chip ID) working.
