@@ -15,6 +15,26 @@ LOG=/root/camera-test.log
 exec > >(tee -a "$LOG") 2>&1
 echo "=== $(date -Is) camera test ==="
 
+# Hardware watchdog safety net: if a probe wedges the kernel, the timer expires
+# and the phone resets itself instead of needing a manual recovery boot.
+WDT=""
+for w in /dev/watchdog /dev/watchdog0; do
+	[ -c "$w" ] && WDT="$w" && break
+done
+if [ -n "$WDT" ]; then
+	echo "--- arming $WDT (30 s, userspace keep-alive)"
+	( exec 3>"$WDT"; for i in $(seq 1 120); do
+		printf '1' >&3 2>/dev/null || exit 0
+		sleep 5
+	done; printf 'V' >&3 2>/dev/null ) &
+	WDT_PID=$!
+	trap 'kill $WDT_PID 2>/dev/null' EXIT
+	# the watchdog only bites if userspace stops running, which is exactly the
+	# failure mode we are testing for
+else
+	echo "--- no hardware watchdog available"
+fi
+
 echo "--- DTB camera nodes"
 ls /proc/device-tree/soc@0/ | grep -E "camss|cci" || echo "none (DTB without camera nodes)"
 

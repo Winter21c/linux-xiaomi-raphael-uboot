@@ -1,0 +1,42 @@
+From: Winter21c <winter@localhost>
+Subject: media: camss: log every clock enable (bring-up aid)
+
+Probing the SM8150 CAMSS block can wedge inside clk_prepare_enable() while the
+CLK framework lock is held, which freezes userspace without a traceback.  Log
+each clock (name, rate, index) before and after it is enabled so the last line
+in the log identifies the clock that wedged, and log the attached CAMSS power
+domain.
+
+This is a bring-up aid only, not intended for merging.
+
+Signed-off-by: Winter21c <winter@localhost>
+---
+--- a/drivers/media/platform/qcom/camss/camss.c	2026-11-07 17:59:37.809628312 +0800
++++ b/drivers/media/platform/qcom/camss/camss.c	2026-11-07 17:59:37.811419419 +0800
+@@ -4564,11 +4564,17 @@
+ 	int i;
+ 
+ 	for (i = 0; i < nclocks; i++) {
++		/* Bring-up aid: the last line printed identifies a wedged clock. */
++		dev_info(dev, "clk[%d/%d] %s: prepare_enable at %lu Hz\n", i + 1,
++			 nclocks,
++			 clock[i].clk ? clk_hw_get_name(clk_get_hw(clock[i].clk)) : "?",
++			 clock[i].rate);
+ 		ret = clk_prepare_enable(clock[i].clk);
+ 		if (ret) {
+ 			dev_err(dev, "clock enable failed: %d\n", ret);
+ 			goto error;
+ 		}
++		dev_info(dev, "clk[%d/%d] enabled\n", i + 1, nclocks);
+ 	}
+ 
+ 	return 0;
+@@ -5343,6 +5349,8 @@
+ 	 * It is possible we are running a new kernel with an old dtb so
+ 	 * fallback to indexes even if a pd_name is defined but not found.
+ 	 */
++	dev_info(dev, "attaching CAMSS power domain \"%s\"\n",
++		 camss->res->pd_name);
+ 	if (camss->res->pd_name) {
+ 		camss->genpd = dev_pm_domain_attach_by_name(camss->dev,
+ 							    camss->res->pd_name);
