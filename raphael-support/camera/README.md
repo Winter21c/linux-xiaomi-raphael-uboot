@@ -285,3 +285,26 @@ it from a camera power helper).
 `camera/reference/raphael-pinctrl.dtsi` confirms the pad usage:
 `cam_sensor_active_wide` = gpio28 + gpio90, `cam_sensor_active_tele` = gpio30 +
 gpio93, both plain GPIO function.
+
+
+## WARNING: do not force the PM8150 rails always-on
+
+Marking `vreg_s5a_2p0` (SMPS5, 2.0 V) `regulator-boot-on; regulator-always-on;`
+while also changing its voltage window makes the phone fail to boot - no USB
+gadget, no fastboot, no network, i.e. only reachable by power cycling and, if
+that is not enough, by the rescue image.  SMPS5 is the parent of
+`vdd-l7-l12-l14-l15-supply`, so it is not a camera-private rail.
+
+**The DTB shipped here is the last known-good one** (`cam-full9`: fixed-regulator
+wrappers with `vin-supply`, no `regulator-always-on` on any PMIC rail).  If a
+camera DTB ever leaves the device unreachable:
+
+1. power cycle (hold Power ~15 s, then press Power),
+2. if it still does not come up, hold Volume-Down + Power for fastboot and boot
+   the rescue image built by `camera/rescue/build-rescue.sh` - it restores
+   `/boot/dtbs/qcom/sm8150-xiaomi-raphael.dtb.bak`,
+3. the previous good DTB is always available in this directory.
+
+When touching the PMIC rails again, prefer enabling the rail lazily from a
+camera power helper (or via the sensor driver's supplies) instead of
+`regulator-always-on`, and change one rail at a time - one boot test per rail.
