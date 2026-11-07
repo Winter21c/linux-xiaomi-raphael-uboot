@@ -220,3 +220,22 @@ the wedged boot for WCSS crash lines before blaming the camera path.
   session: `recover`, `media-order`, `media-variantC`, `front-scan`,
   `imx586-build`, `imx586-probe`.  Every risky stage arms the hardware watchdog
   and then stops feeding it, so a userspace freeze reboots the phone by itself.
+
+## Round 26: everything that does not need the phone is done and published
+
+The phone has been wedged since 22:40 (round 19) and only a physical power cycle
+clears it; the user is asleep.  While waiting, all offline work was completed:
+
+* four camera drivers, one per module (OV8856 in-tree, IMX586 ported public
+  driver, one Samsung bring-up driver covering S5K3T2 and S5K3L6),
+* ten device-tree patches 0001-0010 (camss/dt/rails/CCI1/IMX586/front/ultrawide),
+* `tools/next-session.sh` with ten watchdog-protected stages,
+* CAMERA.md, reports/CAMERA_BRINGUP.md, evidence/, analysis/, state/ updated.
+
+Nothing else can be verified without the device: the drivers cannot be compiled
+(no ARM64 headers here) and the media-graph hypothesis cannot be tested.
+
+RESUME: power cycle the phone, then run
+`raphael-support/tools/next-session.sh run post-mortem` first - it decides whether
+the last freeze was the modem WCSS loop or the camera async link - then
+`regress`, `recover`, and the remaining stages.
