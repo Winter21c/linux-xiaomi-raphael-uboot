@@ -9,7 +9,7 @@
 #   ./next-session.sh all               # run every stage in order
 set -u
 HERE=$(cd "$(dirname "$0")" && pwd)
-STAGES="post-mortem preflight recover media-order media-variantC front-build front-scan imx586-build imx586-probe"
+STAGES="post-mortem preflight recover media-order media-variantC front-build front-scan ultra-scan imx586-build imx586-probe"
 
 stage_post-mortem() {
 	# Decide WHY the previous boot froze: the modem WCSS crash loop and a camera
@@ -91,6 +91,27 @@ stage_front-scan() {
 	for a in 0x0a 0x10 0x20 0x21 0x2d 0x36 0x54; do :; done
 	"$HERE"/i2cscan 3 | head -30
 	"$HERE"/probew 3
+	"$HERE"/wdt 0 dis
+}
+
+stage_ultra-scan() {
+	# ultrawide: needs patches 0007 (CCI1) + 0010 (node) in the installed DTB.
+	# After boot, the third Qualcomm-CCI adapter should exist; scan it.
+	local adapters
+	adapters=$(for d in /sys/bus/i2c/devices/i2c-*; do
+		[ "$(cat "$d/name" 2>/dev/null)" = "Qualcomm-CCI" ] && basename "$d"
+	done | tr '\n' ' ')
+	echo "CCI adapters: $adapters"
+	echo "(expect three once patch 0007 is in: two for CCI0, one for CCI1 master0)"
+	"$HERE"/wdt 60 hold & local w=$!
+	insmod /root/s5k3t2/s5k3t2.ko keep_power=1 2>&1 | head -3
+	sleep 6
+	kill $w 2>/dev/null
+	for a in $adapters; do
+		num=${a#i2c-}
+		echo "--- /dev/i2c-$num ---"
+		"$HERE"/probew "$num"
+	done
 	"$HERE"/wdt 0 dis
 }
 
