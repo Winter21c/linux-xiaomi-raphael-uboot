@@ -331,3 +331,34 @@ sensor is streaming/probing, exactly like the stock camera stack does it.
 The patch has not been compiled or run yet (the phone became unreachable while
 it was written); the first thing to do after recovery is build it, load it and
 re-run the CCI scan with `keep_power=1`.
+
+
+## Patch set status (verified 2026-11-07, offline)
+
+Every patch was dry-run applied against the pristine files from
+`GengWei1997/linux` branch `raphael-v7.3.0`:
+
+| patch | target | applies | built | run on hardware |
+|---|---|---|---|---|
+| 0001-camss-add-sm8150-support | `drivers/media/platform/qcom/camss/{camss,camss-csid,camss-csiphy,camss-vfe}.c` + `camss.h` | yes | yes | yes - /dev/media0 + 14 video nodes |
+| 0002-dts-raphael-camera-nodes | `arch/arm64/boot/dts/qcom/sm8150-xiaomi-raphael.dts` | yes | yes (dtc) | yes - CAMSS + CCI + pinctrl verified |
+| 0003-camss-clock-debug | `camss.c` | yes (offset -72) | no | no |
+| 0004-ov8856-keep-power | `drivers/media/i2c/ov8856.c` | yes | yes | yes - rails/MCLK held for scans |
+| 0005-ov8856-extra-rails | `drivers/media/i2c/ov8856.c` | yes | **no** | **no** |
+
+So 0001/0002/0004 are hardware-proven, 0003 is not needed any more (the per-clock
+debug prints were superseded by the probe-stage instrumentation), and 0005 is the
+next thing to build.
+
+## Where the bring-up stands
+
+Working and verified on the phone: CAMSS registration (media0 + 14 VFE video
+nodes + 22 subdevs, CAMCC clocks taken), both CCI masters registered, CCI
+pinctrl (gpio17-20) and CAMCC MCLK pinctrl (gpio13/14) applied, first successful
+CCI transfer (EEPROM at 0x54 ACKs), sensor rails + MCLK proven to stay enabled
+with `keep_power=1`, modem crash loop stopped.
+
+Not working yet: no camera sensor answers on either CCI master, so no chip id, no
+streaming.  The stock camera DT says the wide module also needs the PM8150 SMPS5
+(2.0 V) and LDO17 (3.1 V) rails, which this port never powered - patch 0005 is
+the intended fix.
