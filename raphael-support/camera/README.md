@@ -37,10 +37,19 @@ CAMCC          0x0ad00000      (already present and bound in the current DTB)
 
 1. **CAMSS driver has no SM8150 support.**  `qcom-camss.ko` matches
    `qcom,sm8250-camss`, `qcom,sm6150-camss`, `qcom,sdm845-camss`, ... but not
-   SM8150.  `0001-camss-add-sm8150-compatible.patch` adds a
-   `qcom,sm8150-camss` compatible that reuses the SM8250 resource tables
-   (CAMSS 480 / CSIPHY 3 nm family) as a starting point; the CSIPHY timing and
-   CSID/VFE clock tables still have to be validated against the hardware.
+   SM8150.  `patches/0001-camss-add-sm8150-support.patch` adds the
+   `qcom,sm8150-camss` compatible with SM8150 resource tables (4 CSIPHY, 2
+   CSID + 2 lite, 2 VFE480 + 2 lite).  The module builds against the running
+   kernel headers and loads.
+
+   Two device-tree obstacles had to be worked around in that patch:
+
+   * the CAMCC node (`/soc@0/clock-controller@ad00000`) has **no phandle**
+     (nothing references it), and adding one through an overlay crashes the
+     kernel in the OF property-change notifier chain (`of_property_notify`), so
+     the driver resolves its clocks by node path instead (`camss_clk_get()`);
+   * the same applies to `power-domains`, so the CAMSS power domains are made
+     optional; the GDSC state is left as the bootloader set it up.
 2. **The board DT has no CAMSS/CSIPHY/CCI nodes** (`sm8150-camera.dtsi` in
    `sm8150-camera-dt.dtsi` is not part of the mainline sm8150.dtsi).  The nodes
    in `sm8150-camera.dtsi` here are a mainline-binding translation of the stock

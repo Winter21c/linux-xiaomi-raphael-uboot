@@ -1,0 +1,70 @@
+/*
+ * Xiaomi Redmi K20 Pro (raphael) camera nodes - runtime overlay
+ *
+ * SM8150 CAMSS/CSIPHY/CCI nodes for the mainline qcom-camss + i2c-qcom-cci
+ * drivers.  Applied at runtime by dtbo-loader with
+ *   create_nodes=/soc@0/camss@ac6a000,/soc@0/cci@ac4a000
+ *
+ * No clocks/power-domains properties: the CAMCC node has no phandle in this
+ * DT and adding one through an overlay crashes the property notifier chain, so
+ * the patched camss driver resolves its clocks by node path and tolerates the
+ * missing power domains (see ../camera/patches/0001-camss-add-sm8150-support.patch).
+ *
+ * Interrupt numbers and register bases are taken from the stock Android
+ * device tree (sm8150-camera.dtsi).
+ */
+/dts-v1/;
+/plugin/;
+
+/ {
+	fragment@0 {
+		target-path = "/soc@0";
+
+		__overlay__ {
+			camss: camss@ac6a000 {
+				compatible = "qcom,sm8150-camss";
+				reg = <0x0 0x0ac65000 0x0 0x2000>,
+				      <0x0 0x0ac66000 0x0 0x2000>,
+				      <0x0 0x0ac67000 0x0 0x2000>,
+				      <0x0 0x0ac68000 0x0 0x2000>,
+				      <0x0 0x0acb3000 0x0 0x1000>,
+				      <0x0 0x0acba000 0x0 0x1000>,
+				      <0x0 0x0acc8000 0x0 0x1000>,
+				      <0x0 0x0accf000 0x0 0x1000>,
+				      <0x0 0x0acaf000 0x0 0x4000>,
+				      <0x0 0x0acb6000 0x0 0x4000>,
+				      <0x0 0x0acc4000 0x0 0x4000>,
+				      <0x0 0x0accb000 0x0 0x4000>;
+				reg-names = "csiphy0", "csiphy1", "csiphy2", "csiphy3",
+					    "csid0", "csid1", "csid2", "csid3",
+					    "vfe0", "vfe1", "vfe_lite0", "vfe_lite1";
+				interrupts = <0 477 4>, <0 478 4>, <0 479 4>, <0 448 4>,
+					     <0 464 4>, <0 466 4>, <0 468 4>, <0 359 4>,
+					     <0 465 4>, <0 467 4>, <0 469 4>, <0 360 4>;
+				interrupt-names = "csiphy0", "csiphy1", "csiphy2", "csiphy3",
+						  "csid0", "csid1", "csid2", "csid3",
+						  "vfe0", "vfe1", "vfe_lite0", "vfe_lite1";
+				status = "okay";
+			};
+		};
+	};
+
+	fragment@1 {
+		target-path = "/soc@0";
+
+		__overlay__ {
+			cci: cci@ac4a000 {
+				compatible = "qcom,sm8250-cci";
+				reg = <0x0 0xac4a000 0x0 0x4000>,
+				      <0x0 0xac4b000 0x0 0x4000>,
+				      <0x0 0xac4e000 0x0 0x1000>;
+				reg-names = "cci0", "cci1", "cci_top";
+				interrupts = <0 460 4>, <0 271 4>;
+				interrupt-names = "cci0", "cci1";
+				#address-cells = <1>;
+				#size-cells = <0>;
+				status = "okay";
+			};
+		};
+	};
+};
