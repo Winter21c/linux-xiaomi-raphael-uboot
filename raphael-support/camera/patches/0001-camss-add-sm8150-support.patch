@@ -23,9 +23,9 @@ built out of tree with gcc against the installed headers).
 Signed-off-by: Winter21c <winter@localhost>
 Reviewed-by: (pending hardware validation)
 ---
---- a/drivers/media/platform/qcom/camss/camss.c	2026-11-07 17:29:28.472669540 +0800
-+++ b/drivers/media/platform/qcom/camss/camss.c	2026-11-07 17:29:28.473652928 +0800
-@@ -5050,6 +5050,74 @@
+--- a/drivers/media/platform/qcom/camss/camss.c	2026-11-07 18:38:08.452836671 +0800
++++ b/drivers/media/platform/qcom/camss/camss.c	2026-11-07 18:38:45.837323713 +0800
+@@ -5050,6 +5050,79 @@
   *
   * Return 0 on success or a negative error code on failure
   */
@@ -93,14 +93,19 @@ Reviewed-by: (pending hardware validation)
 +	if (IS_ERR(clk))
 +		return clk;
 +
-+	devm_add_action_or_reset(dev, (void (*)(void *))clk_put, clk);
++	/*
++	 * Do not register a devres clk_put(): several resource entries map to the
++	 * same CAMCC clock (ife_lite and ife_lite_axi), so devres cleanup would
++	 * clk_put() the same reference twice and crash the kernel after a failed
++	 * probe.  The reference is intentionally kept for the module lifetime.
++	 */
 +	return clk;
 +}
 +
  static int camss_register_entities(struct camss *camss)
  {
  	int i;
-@@ -5241,8 +5309,12 @@
+@@ -5241,8 +5314,12 @@
  						      "power-domains",
  						      "#power-domain-cells");
  	if (camss->genpd_num < 0) {
@@ -115,7 +120,7 @@ Reviewed-by: (pending hardware validation)
  	}
  
  	/*
-@@ -5668,6 +5740,220 @@
+@@ -5668,6 +5745,220 @@
  	.vfe_num = ARRAY_SIZE(vfe_res_8250),
  };
  
@@ -336,7 +341,7 @@ Reviewed-by: (pending hardware validation)
  static const struct camss_resources sc8280xp_resources = {
  	.version = CAMSS_8280XP,
  	.pd_name = "top",
-@@ -5754,6 +6040,7 @@
+@@ -5754,6 +6045,7 @@
  	{ .compatible = "qcom,sdm845-camss", .data = &sdm845_resources },
  	{ .compatible = "qcom,sm6150-camss", .data = &sm6150_resources },
  	{ .compatible = "qcom,sm6350-camss", .data = &sm6350_resources },
@@ -344,8 +349,8 @@ Reviewed-by: (pending hardware validation)
  	{ .compatible = "qcom,sm8250-camss", .data = &sm8250_resources },
  	{ .compatible = "qcom,sm8550-camss", .data = &sm8550_resources },
  	{ .compatible = "qcom,sm8650-camss", .data = &sm8650_resources },
---- a/drivers/media/platform/qcom/camss/camss-csid.c	2026-11-07 17:29:28.472734990 +0800
-+++ b/drivers/media/platform/qcom/camss/camss-csid.c	2026-11-07 17:29:28.473735738 +0800
+--- a/drivers/media/platform/qcom/camss/camss-csid.c	2026-11-07 18:38:08.452907028 +0800
++++ b/drivers/media/platform/qcom/camss/camss-csid.c	2026-11-07 18:38:45.837444994 +0800
 @@ -1161,7 +1161,7 @@
  	for (i = 0; i < csid->nclocks; i++) {
  		struct camss_clock *clock = &csid->clock[i];
@@ -355,8 +360,8 @@ Reviewed-by: (pending hardware validation)
  		if (IS_ERR(clock->clk))
  			return PTR_ERR(clock->clk);
  
---- a/drivers/media/platform/qcom/camss/camss-csiphy.c	2026-11-07 17:29:28.472759570 +0800
-+++ b/drivers/media/platform/qcom/camss/camss-csiphy.c	2026-11-07 17:29:28.473762174 +0800
+--- a/drivers/media/platform/qcom/camss/camss-csiphy.c	2026-11-07 18:38:08.452933539 +0800
++++ b/drivers/media/platform/qcom/camss/camss-csiphy.c	2026-11-07 18:38:45.837469636 +0800
 @@ -655,7 +655,7 @@
  	for (i = 0; i < csiphy->nclocks; i++) {
  		struct camss_clock *clock = &csiphy->clock[i];
@@ -366,8 +371,8 @@ Reviewed-by: (pending hardware validation)
  		if (IS_ERR(clock->clk))
  			return PTR_ERR(clock->clk);
  
---- a/drivers/media/platform/qcom/camss/camss.h	2026-11-07 17:29:28.472808105 +0800
-+++ b/drivers/media/platform/qcom/camss/camss.h	2026-11-07 17:29:28.473819152 +0800
+--- a/drivers/media/platform/qcom/camss/camss.h	2026-11-07 18:38:08.452985758 +0800
++++ b/drivers/media/platform/qcom/camss/camss.h	2026-11-07 18:38:45.837427071 +0800
 @@ -163,6 +163,7 @@
  	void __iomem *(*get_base_address)(struct camss *camss, int id);
  };
@@ -376,8 +381,8 @@ Reviewed-by: (pending hardware validation)
  void camss_add_clock_margin(u64 *rate);
  int camss_enable_clocks(int nclocks, struct camss_clock *clock,
  			struct device *dev);
---- a/drivers/media/platform/qcom/camss/camss-vfe.c	2026-11-07 17:29:28.472779352 +0800
-+++ b/drivers/media/platform/qcom/camss/camss-vfe.c	2026-11-07 17:29:28.473788327 +0800
+--- a/drivers/media/platform/qcom/camss/camss-vfe.c	2026-11-07 18:38:08.452955578 +0800
++++ b/drivers/media/platform/qcom/camss/camss-vfe.c	2026-11-07 18:38:45.837494216 +0800
 @@ -1871,7 +1871,7 @@
  	for (i = 0; i < vfe->nclocks; i++) {
  		struct camss_clock *clock = &vfe->clock[i];
