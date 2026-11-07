@@ -7,6 +7,13 @@ audio-headphone,WCD9340 headphone on SLIMBUS_0_RX (hw:0,0),UCM Headphone + aplay
 audio-jack,WCD9340 MBHC,jack input device reports SW_HEADPHONE_INSERT=1,working
 audio-capture,WCD9340 AMIC1 -> DEC6 -> SLIM TX6 -> MultiMedia1,arecord peak 4000..32767 while speaking / 450 quiet; UCM Mic device,working
 audio-pipewire,WirePlumber card exposure,pwctl status shows no audio devices; "no backend DAIs enabled for MultiMedia1",broken
-camera,CAMSS/CSIPHY/CCI + IMX586/S5K3L6/OV8856/S5K3T2,no DT nodes in boot DTB; no sensor drivers in tree,missing
+camera-camss,qcom-camss on SM8150 (external module),"/dev/media0; 14 msm_vfe*_video* nodes; 22 subdevs; cam_cc_mclk0/1_clk have users",working
+camera-cci,i2c-qcom-cci both masters i2c@ac4a000/i2c@ac4b000,"/dev/i2c-3 and /dev/i2c-4 name Qualcomm-CCI; first ACK 0x54 (EEPROM); needs upstream fix 195f3d74 which is NOT in kernel c033da1fc4fe",working
+camera-ov8856,OV8856 tele module on CCI0 master1 at 0x36,"driver binds: /sys/bus/i2c/devices/4-0036/driver -> ov8856; no probe errors; identify_module requires 0x300a==0x8856 so binding == chip-id verified",working-bound
+camera-imx586,IMX586 wide module on CCI0 master0 at 0x1a,"ACK + 0x0004=0x0aff 0x0008=0x0040 over CCI; no mainline driver; needs SMPS5 2.0V + L17 3.1V rails",identified
+camera-s5k3l6,S5K3L6 ultrawide (stock DT: csiphy1, MCLK2 gpio15, vdig gpio95),"not yet addressed; rails unclaimed pins 95/31/32",unknown
+camera-s5k3t2,S5K3T2 front (stock DT: csiphy3 cci1, MCLK3 gpio16, vdig gpio34),not yet addressed,unknown
+camera-rails,PM8150 SMPS5 2.0V + LDO17 3.1V + viodd/BOB/S8 + GPIO vdig enables,"ov8856 module enables viodd+BOB+S8+L17 via optional supplies; regulator-always-on on PMIC rails BRICKS the boot twice",working
+camera-mediagraph,sensor -> camss async link,"needs remote-endpoint on the CAMSS endpoint; a DTB with it boots but loading camss+ov8856 freezes userspace (round 19)",blocked
 gnss,Q6 GNSS,gnss.ko exists; no DT node /dev/gnss0,missing
 fingerprint,Goodix under display,no mainline driver,missing

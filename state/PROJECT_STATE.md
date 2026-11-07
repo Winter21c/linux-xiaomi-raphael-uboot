@@ -176,3 +176,32 @@ write-probe bus3: 0x54 ACK      write-probe bus4: nothing
 ```
 
 So everything except the sensor ACK is back exactly where it was.
+
+## 2026-11-08 (rounds 14-19): camera bring-up
+
+Root cause chain for "no sensor answers on CCI" (all measured, see
+`state/DECISIONS.md` R1-R6 and `evidence/raw/camera-cci-probe-rounds14-19.txt`):
+
+1. CSIPHY register windows overlapped -> `CCI reset timeout (-110)`.
+2. No pinctrl on the CCI node: pads need `cci_i2c` (gpio17-20) and `cam_mclk`
+   (gpio13/14), claimed by the CCI node, not by the sensor nodes.
+3. The running kernel lacks upstream `195f3d74` (CCI HALT_ACK); rebuilt the
+   module from branch-head source.
+4. The sensors were simply unpowered: the modules need PM8150 SMPS5 (2.0 V) and
+   LDO17 (3.1 V) on top of viodd/BOB/S8.  Once present, both CCI masters see the
+   cameras (0x1a + 0x54 on i2c-3, 0x36 + 0x21 on i2c-4).
+5. Addresses are NOT the stock-DT ones: tele OV8856 is at **0x36** (not 0x10) and
+   the driver binds there, which verifies the chip id (`identify_module` only
+   accepts 0x8856).
+
+Current blocker: the CAMSS-side `remote-endpoint` (needed for the sensor to join
+the media graph) boots fine but loading camss + ov8856 **freezes userspace**, the
+same signature as the old modem crash loop.  The phone needs a power cycle; the
+user is asleep.  Everything needed for the next attempt is prepared:
+`raphael-support/tools/{wdt,wdt.c,v4ltool.c,camtest.sh}` (watchdog so a freeze
+self-reboots) and `raphael-support/camera/...-variantC.dtb` (CAMSS-side link only).
+
+RESUME HERE: after the power cycle, ssh in, then
+`base64`-free path: upload tools, run `camtest.sh sensor-first` (watchdog armed),
+and if it still wedges, run `camtest.sh camss-first`; check `journalctl -k` from
+the wedged boot for WCSS crash lines before blaming the camera path.

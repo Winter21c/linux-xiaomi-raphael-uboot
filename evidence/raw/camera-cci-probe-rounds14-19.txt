@@ -1,0 +1,40 @@
+# Camera CCI probe evidence, Redmi K20 Pro (raphael/SM8150), mainline 7.3.0-rc5
+# kernel 7.3.0-rc5-sm8150-gc033da1fc4fe, DTB variants as noted.
+# Collected on 2026-11-07/08 from the device over SSH (user@172.16.42.1).
+
+## A. Before the PM8150 SMPS5/LDO17 rails existed (cam-full9 DTB, ov8856 keep_power=1)
+write-probe /dev/i2c-3:
+  0x54 ACK (write8=yes write16=yes)
+write-probe /dev/i2c-4:
+  (nothing)
+
+## B. After adding vs5-supply/vl17-supply (cam-clean DTB 747d08fd) + rebuilt
+##    i2c-qcom-cci carrying upstream 195f3d74, ov8856 keep_power=1
+write-probe /dev/i2c-3:
+  0x1a ACK (write8=yes write16=yes)
+  0x54 ACK (write8=yes write16=yes)
+write-probe /dev/i2c-4:
+  0x21 ACK (write8=yes write16=yes)
+  0x36 ACK (write8=yes write16=yes)
+
+## C. Single-byte register reads (16-bit register addressing over CCI)
+bus4 0x36:  3008=00  3009=00  300a=00  300b=88  300c=5a  3016=08  3017=10
+bus4 0x21:  3008=00  3009=00  300a=00  300b=88  300c=5a  3016=08  3017=10
+bus3 0x1a:  3008=00  3009=00  300a=02  300b=00  300c=00  3016=00  3017=00
+
+## D. 2-byte reads at Samsung-style low registers
+bus4/36:  0000=0000 0001=0000 0002=0000 0004=0000 0008=0000 3000=0000 3100=0032
+bus4/21:  0000=0000 0001=0000 0002=0000 0004=0000 0008=0000 3000=0000 3100=0032
+bus3/1a:  0000=0000 0001=0000 0002=0000 0004=0aff 0008=0040 3000=0000 3100=0000
+
+## E. Driver binding (variant B DTB e3880d0f: single tele node at 0x36, tele rails)
+readlink /sys/bus/i2c/devices/4-0036/driver
+  -> ../../../../../../bus/i2c/drivers/ov8856
+/proc/modules: ov8856 28672 0 - Live ... (O)
+probe log: no error lines
+regulator_summary: camera_viodd 0 1 0 ; camera_vdig_tele 0 1 0
+
+## F. Variant with the CAMSS-side remote-endpoint (newcam.dtb 88eb7469)
+boot: SSH ok 55 s after reboot; regulator-always-on audit = 3 base-board entries
+loading camss then ov8856: userspace freezes (ping ok, TCP/22 open, every SSH
+session hangs during authentication); no self-reboot within 3 minutes.
