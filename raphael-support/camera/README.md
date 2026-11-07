@@ -362,3 +362,27 @@ Not working yet: no camera sensor answers on either CCI master, so no chip id, n
 streaming.  The stock camera DT says the wide module also needs the PM8150 SMPS5
 (2.0 V) and LDO17 (3.1 V) rails, which this port never powered - patch 0005 is
 the intended fix.
+
+
+## The DTB that is safe to boot (and the one that is not)
+
+Two camera DTBs live here now:
+
+| file | content | boot |
+|---|---|---|
+| `sm8150-xiaomi-raphael-camera.dtb` (`f5c79245`) | camera nodes + CCI/MCLK pinctrl, no PMIC rail flags | **boots** (verified) |
+| `sm8150-xiaomi-raphael-camera-vs5vl17.dtb` (`cam-clean`) | the same plus `vs5-supply`/`vl17-supply` on the sensor nodes | **untested** - built from the pristine DTS + patch 0002 + supplies only |
+
+`cam-clean` was rebuilt from scratch because an earlier DTB carried
+`regulator-boot-on; regulator-always-on;` on PM8150 SMPS5/LDO17 (an edit left over
+from a failed experiment) and bricked the boot twice.  The audit of the rebuilt
+image shows exactly three `regulator-always-on` properties, all from the base
+board DTS and none of them a camera rail:
+
+```
+vreg_s4a_1p8, ts_avdd_3p3 (tlmm 98), ts_vddio_1p8 (tlmm 100)
+```
+
+Rule for the future: build camera DTBs from `sm8150-xiaomi-raphael.dts.orig` +
+patch 0002 + the intended delta, never from a working file that may carry an old
+experiment, and grep the *compiled* DTB for `regulator-always-on` before flashing.
