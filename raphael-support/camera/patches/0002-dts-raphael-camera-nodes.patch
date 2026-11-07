@@ -20,11 +20,15 @@ overlay crashes the OF property-change notifier.
 * link-frequencies must list every rate the sensor driver supports
   (4 lane: 360M + 180M, 2 lane: 720M + 360M).
 
+* pinctrl: cci_i2c on gpio17-20 (CCI0 = 17/18, CCI1 = 19/20) and cam_mclk
+  on gpio13/14 - without these the CCI bus never moves and the MCLK pads
+  stay unconnected, which was the actual reason every CCI transfer timed out.
+
 Signed-off-by: Winter21c <winter@localhost>
 ---
---- a/arch/arm64/boot/dts/qcom/sm8150-xiaomi-raphael.dts	2026-11-07 22:01:59.140835619 +0800
-+++ b/arch/arm64/boot/dts/qcom/sm8150-xiaomi-raphael.dts	2026-11-07 22:01:59.141894325 +0800
-@@ -1390,3 +1390,273 @@
+--- a/arch/arm64/boot/dts/qcom/sm8150-xiaomi-raphael.dts	2026-11-07 22:16:21.191756339 +0800
++++ b/arch/arm64/boot/dts/qcom/sm8150-xiaomi-raphael.dts	2026-11-07 22:16:21.192801926 +0800
+@@ -1390,3 +1390,312 @@
  		};
  	};
  };
@@ -226,6 +230,9 @@ Signed-off-by: Winter21c <winter@localhost>
 +			      "fast_ahb_src", "cpas_ahb", "core_ahb",
 +			      "cam_ahb_clk";
 +
++		pinctrl-names = "default";
++		pinctrl-0 = <&cci0_default &cci1_default>;
++
 +		#address-cells = <1>;
 +		#size-cells = <0>;
 +
@@ -245,6 +252,8 @@ Signed-off-by: Winter21c <winter@localhost>
 +				reset-gpios = <&tlmm 28 GPIO_ACTIVE_LOW>;
 +				clocks = <&camcc CAM_CC_MCLK0_CLK>;
 +				clock-names = "xvclk";
++				pinctrl-names = "default";
++				pinctrl-0 = <&cam_mclk0_default>;
 +				assigned-clocks = <&camcc CAM_CC_MCLK0_CLK>;
 +				assigned-clock-rates = <19200000>;
 +
@@ -278,6 +287,8 @@ Signed-off-by: Winter21c <winter@localhost>
 +				reset-gpios = <&tlmm 30 GPIO_ACTIVE_LOW>;
 +				clocks = <&camcc CAM_CC_MCLK1_CLK>;
 +				clock-names = "xvclk";
++				pinctrl-names = "default";
++				pinctrl-0 = <&cam_mclk1_default>;
 +				assigned-clocks = <&camcc CAM_CC_MCLK1_CLK>;
 +				assigned-clock-rates = <19200000>;
 +
@@ -296,5 +307,37 @@ Signed-off-by: Winter21c <winter@localhost>
 +				};
 +			};
 +		};
++	};
++};
++
++&tlmm {
++	/* CCI I2C buses: gpio17/18 = master 0, gpio19/20 = master 1 */
++	cci0_default: cci0-default-state {
++		pins = "gpio17", "gpio18";
++		function = "cci_i2c";
++		drive-strength = <2>;
++		bias-pull-up;
++	};
++
++	cci1_default: cci1-default-state {
++		pins = "gpio19", "gpio20";
++		function = "cci_i2c";
++		drive-strength = <2>;
++		bias-pull-up;
++	};
++
++	/* CAMCC MCLK outputs must be routed to the sensor pins */
++	cam_mclk0_default: cam-mclk0-default-state {
++		pins = "gpio13";
++		function = "cam_mclk";
++		drive-strength = <2>;
++		bias-disable;
++	};
++
++	cam_mclk1_default: cam-mclk1-default-state {
++		pins = "gpio14";
++		function = "cam_mclk";
++		drive-strength = <2>;
++		bias-disable;
 +	};
 +};
