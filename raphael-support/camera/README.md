@@ -498,3 +498,35 @@ single-sensor bring-up DTB (tele only).
 Next: put the port/endpoint back so the sensor joins the media graph as an async
 subdevice (it is bound but not yet linked to CSIPHY2 - the v4l-subdev list still
 contains only the 22 camss entities), then configure formats and try a stream.
+
+
+## Attempt: camss-side remote-endpoint (round 19) - boots, but the async link wedges
+
+The missing piece for the media graph is that `camss_parse_ports()` looks at the
+*CAMSS* endpoints and needs their `remote-endpoint` property to create an async
+subdevice entry.  A DTB was produced that differs from the booted one by exactly
+two properties (verified by decompiling both and diffing the trees):
+
+```
+csiphy2 endpoint:  remote-endpoint = <0x125>;   (new)
+sensor endpoint:   phandle = <0x125>;           (new)
+```
+
+That DTB boots (SSH up 55 s after reboot), and the audit still shows only the
+three base-board `regulator-always-on` properties, so it is not another rail
+accident.
+
+But loading camss and then the OV8856 module with that link weds the phone the
+same way the old modem crash loop did: ping answers, TCP/22 accepts, but every
+session hangs during authentication, i.e. userspace is frozen while the kernel
+lives.  Only a power cycle clears it, so the experiment stops here for now.
+
+Next hypotheses to test, cheapest first:
+
+1. load the module order the other way around (sensor first, then camss) so the
+   notifier completes from the other direction,
+2. drop the sensor's own `remote-endpoint` and keep only the CAMSS-side one
+   (the async core only needs the CAMSS endpoint to point at the sensor),
+3. if it still wedges, the deadlock is inside the notifier completion path
+   (sensor probe -> runtime PM -> CSIPHY link) and needs the `dev_info` trail in
+   `camss_parse_ports`/`camss_async_bound` to localise.
