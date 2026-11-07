@@ -9,7 +9,7 @@
 #   ./next-session.sh all               # run every stage in order
 set -u
 HERE=$(cd "$(dirname "$0")" && pwd)
-STAGES="post-mortem preflight recover media-order media-variantC front-scan imx586-build imx586-probe"
+STAGES="post-mortem preflight recover media-order media-variantC front-build front-scan imx586-build imx586-probe"
 
 stage_post-mortem() {
 	# Decide WHY the previous boot froze: the modem WCSS crash loop and a camera
@@ -70,6 +70,16 @@ stage_media-variantC() {
 	cp /root/raphael-support/camera/sm8150-xiaomi-raphael-camera-variantC.dtb \
 	   /boot/dtbs/qcom/sm8150-xiaomi-raphael.dtb && sync
 	echo "variantC installed; reboot, then run stage media-order"
+}
+
+stage_front-build() {
+	# compile the S5K3T2 bring-up driver (power + chip id, no streaming)
+	mkdir -p /root/s5k3t2
+	cp "$HERE"/../camera/drivers/s5k3t2.c /root/s5k3t2/s5k3t2.c
+	printf 'obj-m += s5k3t2.o\n' > /root/s5k3t2/Makefile
+	make -C /lib/modules/$(uname -r)/build M=/root/s5k3t2 \
+	     CC=/usr/local/bin/gcc-noclang LD=/usr/local/bin/ld-nollvm modules 2>&1 | tail -25
+	ls -la /root/s5k3t2/s5k3t2.ko 2>/dev/null
 }
 
 stage_front-scan() {
