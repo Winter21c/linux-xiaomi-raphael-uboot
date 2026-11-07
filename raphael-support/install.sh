@@ -15,11 +15,9 @@ KMOD="/lib/modules/$KREL/extra/raphael"
 echo "==> installing kernel modules into $KMOD"
 mkdir -p "$KMOD"
 for m in input/pm8150b-haptics of/dtbo-loader; do
-	[ -f "$SRC/drivers/$m/$m.ko" ] || {
-		echo "missing $SRC/$m/$m.ko - build it first (see README)" >&2
-		exit 1
-	}
-	cp "$SRC/drivers/$m/$m.ko" "$KMOD/"
+	ko="$SRC/drivers/$m/$(basename "$m").ko"
+	[ -f "$ko" ] || { echo "missing $ko - build it first (see README)" >&2; exit 1; }
+	cp "$ko" "$KMOD/"
 done
 depmod -a
 
