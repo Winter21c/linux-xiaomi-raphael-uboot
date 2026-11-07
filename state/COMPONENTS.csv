@@ -1,0 +1,12 @@
+domain,component,evidence,status
+sensors,ICM4x6xx accel/gyro + TCS3701 ALS/prox + AK0991x mag via SLPI/SDSP,"ssccli live data; iio-sensor-proxy HasAccelerometer/HasAmbientLight/HasProximity=true",working
+nfc,NXP PN553 on QUPv3 SE9 i2c@a84000 0x28,"/sys/class/nfc/nfc0; nxp-nci DEV_UP+START_POLL return 0",working
+haptics,PM8150B haptics (SPMI USID3 0xc000),ff-test EVIOCSFF+EV_FF; dmesg EN_CTL1=0x80 STATUS1=0x82; user felt vibration,working
+audio-playback,TFA9874 speaker on QUAT_MI2S (hw:0,1),aplay 660 Hz tone audible to user,working
+audio-headphone,WCD9340 headphone on SLIMBUS_0_RX (hw:0,0),UCM Headphone + aplay audible to user,working
+audio-jack,WCD9340 MBHC,jack input device reports SW_HEADPHONE_INSERT=1,working
+audio-capture,WCD9340 AMIC1 -> DEC6 -> SLIM TX6 -> MultiMedia1,arecord peak 4000..32767 while speaking / 450 quiet; UCM Mic device,working
+audio-pipewire,WirePlumber card exposure,pwctl status shows no audio devices; "no backend DAIs enabled for MultiMedia1",broken
+camera,CAMSS/CSIPHY/CCI + IMX586/S5K3L6/OV8856/S5K3T2,no DT nodes in boot DTB; no sensor drivers in tree,missing
+gnss,Q6 GNSS,gnss.ko exists; no DT node /dev/gnss0,missing
+fingerprint,Goodix under display,no mainline driver,missing
