@@ -8,8 +8,9 @@
 | A4 | P1 | partial | Audio: speaker OK, headphone OK, jack detection OK, mic capture (ALSA) OK; PipeWire/WirePlumber does not expose the card |
 | A5 | P1 | partial | **Camera.** DONE: camss on SM8150 (media0/14 video/22 subdevs), CCI both masters + upstream HALT_ACK fix, CCI/MCLK pinctrl, rails (viodd/BOB/S8/L17, SMPS5 for the wide module), OV8856 binds at 0x36 with chip-id verified. OPEN: sensor not in the media graph — the CAMSS-side `remote-endpoint` DTB boots but loading camss+ov8856 freezes userspace (round 19); phone needs a power cycle. NEXT: variant C (CAMSS-side link only), reversed load order, then instrument the notifier |
 | A5.1 | P1 | blocked | Camera media graph: chip id verified but the async link wedges userspace; needs the power cycle then variant C. Blocker: device frozen, only a physical power cycle clears it |
-| A5.2 | P2 | open | IMX586 (wide, CCI0 m0 @0x1a): no mainline driver; port one and wire `vs5-supply`+`vl17-supply` |
-| A5.3 | P2 | open | Identify 0x21 on CCI0 master1 (returns the same data as 0x36) and S5K3L6/S5K3T2 addresses with the stock-DT rail map |
+| A5.2 | P1 | partial | IMX586 (wide, CCI0 m0 @0x1a): public RPi driver found and ported offline to the 7.3 API (`camera/drivers/imx586.c`, MIT repo/GPL driver). Next: build as obj-m on the device, add the DT node with VANA/VDIG/VDDL + vs5/vl17 supplies, check chip id 0x30dc==0x32 |
+| A5.3 | P1 | open | Front S5K3T2 (CSIPHY1, CCI0 m0, MCLK2 gpio15, reset gpio12, VDIG_EN gpio95): power it with patch 0006 + keep_power, scan /dev/i2c-3, read the Samsung id at 0x0000, then write the driver. Also identify 0x21 on CCI0 master1 |
+| A5.5 | P2 | blocked | Ultrawide S5K3L6 on CCI1 master0: unreachable because i2c-qcom-cci has NUM_MASTERS=2 and only CCI0 is instantiated. Blocker: needs a 4-master driver change or a second CCI node (shared cci_top region) |
 | A5.4 | P2 | open | Streaming: once the sensor joins the graph, set formats with a small V4L2 ioctl tool (media-ctl/v4l2-ctl are not installed) and capture from msm_vfe2_rdi* |
 | A6 | P2 | open | GNSS: gnss.ko present, no DT node/device |
 | A7 | P2 | open | Fingerprint (Goodix) - no mainline driver |

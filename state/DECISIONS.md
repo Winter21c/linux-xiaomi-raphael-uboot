@@ -80,3 +80,37 @@ modem crash loop (ping + TCP/22 answer, every SSH session hangs in auth).
 there or in the sensor probe/runtime-PM path it triggers.  Next experiments, in
 order: reverse module load order, CAMSS-side link only (drop the sensor-side
 `remote-endpoint`), then instrument the notifier path.
+
+## 2026-11-08 R7. Sources searched for the remaining sensor drivers
+
+Searched (trees + file-level) for `imx586`, `ov8856`, `s5k3l6`, `s5k3t2`:
+
+| source | result |
+|---|---|
+| `MiCode/Xiaomi_Kernel_OpenSource` branch `raphael-p-oss` (69 949 files) | 0 hits; camera dirs hold only the framework |
+| same repo `cepheus-q-oss` (SM8150 sibling) | 0 hits |
+| `LineageOS/android_kernel_xiaomi_sm8150` (74 120 files, truncated) | 0 hits; only `ais/cam_sensor_module` framework |
+| `Butterfingerss/Kernel_xiaomi_raphael` | 0 hits |
+| GitHub repo search `s5k3t2`, `s5k3l6` | 0 repositories |
+| public IMX586 V4L2 drivers | **3 found** (youjunl, Thomas-Li-AVSS, amelieko) |
+
+Adopted `youjunl/imx586-v4l2-driver` (GPL-2.0 driver, MIT repo): complete
+register tables, chip id 0x30dc == 0x32.  Ported offline to the 7.3 API in
+`camera/drivers/imx586.c` (state accessors + optional vs5/vl17 rails).
+
+## 2026-11-08 R8. The ultrawide is not reachable with the current CCI driver
+
+`i2c-qcom-cci.c` (branch head) has `#define NUM_MASTERS 2` and maps
+`i2c-bus@<n>` to `cci->master[n]`; our single `cci@ac4a000` node therefore exposes
+CCI0 master0/master1 = `/dev/i2c-3` and `/dev/i2c-4`.  The ultrawide (stock DT
+`qcom,cam-sensor@3`, `CAMU_*`) is on **CCI1 master0** (i2c@ac4b000), so it cannot
+be probed until the driver learns four masters or a second instance is created
+(both would need the shared `cci_top` region handled).
+
+## 2026-11-08 R9. Front camera mapping corrected
+
+The stock DT tags `qcom,cam-sensor@2` with `CAMF_RESET`/`CAMF_VDIG_EN` and `@3`
+with `CAMU_*`, i.e. **front = CSIPHY1 / CCI0 master0 / MCLK2 gpio15 / reset
+gpio12 / VDIG_EN gpio95** and ultrawide = CSIPHY3 / CCI1 master0 / MCLK3 gpio16 /
+reset gpio23 / VDIG_EN gpio34.  An earlier note in this file had the two swapped;
+this entry supersedes it.

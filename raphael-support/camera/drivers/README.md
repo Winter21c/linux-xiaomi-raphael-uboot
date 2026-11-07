@@ -43,3 +43,40 @@ options are (a) the phone's own vendor partition if the camera drivers shipped a
 modules (`/vendor/lib/modules/`), or (b) writing power/ID-only drivers and
 discovering modes from the sensor's behaviour - recorded as a blocker, not an
 assumption.
+
+
+## Port progress on imx586.c (offline, not compiled yet)
+
+`imx586.c` here is `imx586-rpi-6.1.c` after these changes:
+
+1. **6.8+ state accessors**: `v4l2_subdev_get_try_format/crop/compose(sd, state,
+   pad)` -> `v4l2_subdev_state_get_format/crop(state, pad)` (7 call sites).
+   Verified against `include/media/v4l2-subdev.h` of the branch: the old helpers
+   are gone and the macro `v4l2_subdev_state_get_format(state, pad, ...)` is the
+   replacement.
+2. **The wide module's extra rails**: optional `vs5` (PM8150 SMPS5 2.0 V) and
+   `vl17` (LDO17 3.1 V) supplies, requested with
+   `devm_regulator_get_optional()` and enabled in `imx586_power_on()` right after
+   the clock, disabled in `imx586_power_off()` - the same shape as patch 0005 for
+   ov8856, and deliberately without any `regulator-always-on`.
+3. Paren/brace balance and the remaining API set (`devm_clk_get`,
+   `__v4l2_ctrl_modify_range`, `__v4l2_ctrl_handler_setup`,
+   `v4l2_async_register_subdev_sensor`, `.s_stream`) were checked against the
+   branch headers; `.s_stream` still exists in 7.3 (deprecated but supported) and
+   matches what `qcom-camss` calls.
+
+Still to do, in order: build it as `obj-m` against the device's headers and fix
+whatever else the 7.3 tree moved; add the DT node at CCI0 master0 **0x1a** with
+supplies named `VANA-supply` / `VDIG-supply` / `VDDL-supply` (the driver looks up
+those exact uppercase names) mapped to `vreg_bob` / `camera_vdig_wide` /
+`camera_viodd_ldo`, plus `vs5-supply` / `vl17-supply`; then check the chip id
+(`0x30dc == 0x32`) and try one 4056x3040 mode.
+
+## The ultrawide (S5K3L6) is on CCI1, which this driver cannot reach
+
+`drivers/i2c/busses/i2c-qcom-cci.c` in our tree has `#define NUM_MASTERS 2` and
+maps `i2c-bus@<n>` to master `<n>`, so the single `cci@ac4a000` node exposes
+**CCI0 master0/master1 only** (`/dev/i2c-3`, `/dev/i2c-4`).  The ultrawide sits on
+**CCI1 master0** (i2c@ac4b000) and is therefore unreachable until either the
+driver supports four masters or a second CCI node is instantiated (which needs
+care: both nodes would map the shared `cci_top` region).
