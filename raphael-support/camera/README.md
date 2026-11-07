@@ -124,3 +124,18 @@ i2cdetect -l            # Qualcomm-CCI adapters
 The OV8856 driver reads its chip ID at probe time; a message like
 `ov8856 0-0010: chip ID 0x8856` proves that the CCI bus, the sensor supplies
 and the MCLK from CAMCC all work.
+
+
+## Safe testing (important)
+
+The camera module must **not** be installed under `/lib/modules`: udev
+autoloads it at boot and a wedged probe takes the whole system down (see
+`README-rescue.md`).  Use
+
+```
+sudo ./test-camera.sh /root/camss-final/qcom-camss.ko
+```
+
+which `insmod`s the module from `/root`, logs to `/root/camera-test.log`, and
+prints the media topology.  If the system wedges, follow `README-rescue.md`
+(`build-rescue.sh` + `fastboot boot`).

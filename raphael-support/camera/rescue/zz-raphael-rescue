@@ -1,0 +1,54 @@
+#!/bin/sh
+# One-shot rescue hook: revert the camera DTB and remove the camera module.
+# Runs in the initramfs (local-top), after raphael-subpartition created the
+# loop devices for the nested GPT inside the userdata partition.
+PREREQ=""
+prereqs() { echo "$PREREQ"; }
+case $1 in
+prereqs) prereqs; exit 0;;
+esac
+
+. /scripts/functions
+
+LOSETUP="/usr/sbin/losetup"
+[ -x "$LOSETUP" ] || LOSETUP="losetup"
+
+panic_rescue() {
+	echo "RESCUE: $*"
+	# never drop to a shell we cannot see; reboot instead
+	sleep 2
+	reboot -f
+}
+
+modprobe loop 2>/dev/null || true
+
+# find the loop device that carries p2 (created by raphael-subpartition)
+ROOT=""
+for d in /dev/loop*p2; do
+	[ -b "$d" ] || continue
+	ROOT="$d"
+	break
+done
+[ -n "$ROOT" ] || panic_rescue "no loop partition found"
+
+mkdir -p /rescue-root
+mount -t ext4 -o rw "$ROOT" /rescue-root || panic_rescue "mount $ROOT failed"
+
+D=/rescue-root/boot/dtbs/qcom/sm8150-xiaomi-raphael.dtb
+if [ -f "$D.bak" ]; then
+	cp "$D.bak" "$D" && echo "RESCUE: DTB restored"
+else
+	echo "RESCUE: no DTB backup, leaving as is"
+fi
+
+for m in /rescue-root/lib/modules/*/extra/raphael/qcom-camss.ko; do
+	[ -f "$m" ] || continue
+	rm -f "$m"
+	echo "RESCUE: removed $m"
+done
+
+sync
+umount /rescue-root 2>/dev/null
+echo "RESCUE: done, rebooting"
+sleep 2
+reboot -f
