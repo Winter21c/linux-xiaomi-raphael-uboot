@@ -63,3 +63,50 @@ no camera_v2 driver source; only DT bindings).
   `has_pd = true` + `pd_name = "ife0"/"ife1"` on VFE0/VFE1,
 - VFE reset failure now logs a warning and continues instead of aborting, so the
   rest of the pipeline can be exercised.
+
+## Update: the VFE block is inert, not just missing an IRQ
+
+A reset-offset sweep (`camss-vfe-480.c`, writes 1 to 0x00, 0x04, 0x08, 0x0c,
+0x10, 0x14, 0x18, 0x1c, 0x20, 0x24 and reads back the ack register after each)
+reports:
+
+```
+raphael-reset: sweep on VFE2 (lite=1), ack_off=0x40
+  off 0x1c: status_before=0x00000000 status_after=0x00000000
+  ... every candidate identical ...
+raphael-reset: after SM8250 write cmd=0x00000000 mask=0x00000000 status=0x00000000
+VFE2 hw_version=0x10000000
+```
+
+So:
+* reads return a **constant** `0x10000000` (looks like a stalled/idle bus value),
+* **writes never stick**: `VFE_IRQ_MASK(0)` and `VFE_GLOBAL_RESET_CMD` read back 0,
+* no candidate offset produces a status bit, therefore no IRQ on any SPI.
+
+That is the signature of a block that is not really powered/clocked or whose NoC
+slave port is closed - not of a wrong reset offset.
+
+Leads, in order of likelihood:
+
+1. **VFE power domain**: `camcc-sm8150.c` only has `titan_top_gdsc`, `bps_gdsc`,
+   `ife_0_gdsc` and `ife_1_gdsc` - there is **no ife_lite GDSC**, and camss keeps
+   `has_pd = false` for the lite VFEs (VFE2/VFE3).  If SM8150 gates the lite VFEs
+   through something else, that is the gap.  The full VFE0 path fails the same
+   way though, and VFE0 does attach `ife0` by name.
+2. **CAMSS top / CPAS**: the vendor DT has `qcom,sm8150-camnoc-virt` at
+   0xac00000 and `cpas-camnoc` at 0xac00000+ which mainline camss never touches;
+   the CAMSS top-level IRQ enable may live there.
+3. CAMCC reset lines (`cam_cc_ife_0_clk` reset bits) may be held.
+
+## What changed end-to-end in this round
+
+| item | before | now |
+|---|---|---|
+| DTB | rebuilt from source, **no display** | built on the shipped DTB: display + modem + camera nodes |
+| booted modules | stale copies from `/lib/modules` | fixed builds installed there (64-bit DMA, PD order, reset-continue) |
+| CSID reset | `-EIO`, pipeline aborts | warns and continues, `STREAMON` now reaches the next layer (`EPIPE`) |
+| VFE reset | `-EIO` | warns and continues, but the block proves inert |
+
+Reproduction: `tools/mcam.c` builds on the device; the pipeline is
+`ov8856 (3-0036) -> csiphy2 -> csid2 -> vfe2_rdi0`, formats 1640x1232 / `0x300a`,
+video node `msm_vfe2_video0` (currently `/dev/video8`).

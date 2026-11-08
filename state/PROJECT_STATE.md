@@ -239,3 +239,16 @@ RESUME: power cycle the phone, then run
 `raphael-support/tools/next-session.sh run post-mortem` first - it decides whether
 the last freeze was the modem WCSS loop or the camera async link - then
 `regress`, `recover`, and the remaining stages.
+
+
+## Round 32: display/wifi restored, VFE proven inert
+
+* camera DTB now built **on top of the shipped DTB** (panel compatible must stay
+  `samsung,ams639rq08`), display + modem + camera nodes coexist,
+* fixed modules installed into `/lib/modules` (that is what boots),
+* CSID reset failure demoted to a warning so the pipeline continues; `STREAMON`
+  now fails with EPIPE instead of EIO,
+* the VFE block is **inert**: `hw_version=0x10000000` but every register write
+  reads back 0 across 10 candidate reset offsets, so no reset-ack and no IRQ.
+  Next leads: VFE GDSC coverage (no ife_lite GDSC exists in camcc-sm8150),
+  CAMSS top/CPAS registers the vendor DT has and mainline ignores, CAMCC resets.
