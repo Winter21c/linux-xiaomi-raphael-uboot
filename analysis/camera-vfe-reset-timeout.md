@@ -309,3 +309,21 @@ gate that mainline camss never opens (the vendor's `qcom,cam-cpas@ac40000` /
 `cphy_rx_clk_src` + `ife_cphy_rx_clk` for a *second* domain).  Until that gate is
 found, the CSI-2 path cannot carry data even though the sensor, PHY power and all
 clocks look correct from the driver's point of view.
+
+## Raw register peek confirms: CSID drops writes, CPAS cannot be touched
+
+`tools/camera_peek.c` (a module that ioremaps blocks, prints every non-zero word and
+then refuses to stay loaded) was used for two measurements:
+
+1. **idle**: every camera block reads back 0 - the blocks are power collapsed, which
+   also explains why reading `cpas_top` (0xac40000) or `camnoc` (0xac42000) in that
+   state raised an external abort and rebooted the phone twice;
+2. **during a stream**: VFE0 holds real content (`hw_version = 0x10020000`) while
+   CSID0 still reads 0 and silently drops writes
+   (`csid0 core_ctrl0: wrote=0x00000211 readback=0x00000000`).
+
+So the CSID is not misconfigured by the driver - it does not accept register writes
+at all, with `ife_0_csid_clk` enabled at 400 MHz and `ife_0_gdsc` + `titan_top_gdsc`
+powered.  The vendor's `qcom,cam-cpas@ac40000` block (cam_cpas_top + cam_camnoc),
+which mainline camss never drives, remains the prime suspect for the missing gate,
+but it cannot be probed while collapsed.
