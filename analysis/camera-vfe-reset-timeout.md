@@ -480,3 +480,30 @@ what gates 0xE00 (a separate "csiphy top" power/clock, or a CAMCC BCR/clock we h
 not enabled - the vendor csiphy node lists `cphy_rx_clk_src`, `csiphyN_clk`,
 `csiNphytimer_clk_src` and `csiNphytimer_clk`, and only the two gate clocks plus the
 shared `cphy_rx` are currently taken).
+
+## The 0xE00 group is not implemented in any CSIPHY window
+
+Writability test of the CSIPHY global block, run with a live pipeline:
+
+```
+glb: [0x000] before=0x0000008e wrote=0x0000008e after=0x0000008e   OK
+glb: [0x400] ... OK      glb: [0x800] ... OK      glb: [0xc00] ... OK
+glb: [0xe00] before=0x00000000 wrote=0x00000002 after=0x00000000   dropped
+glb: [0xe28] ... dropped     glb: [0xe90] ... dropped   glb: [0xea0] ... dropped
+```
+
+and the same offset is equally dead in all four PHY windows
+(`csiphy0+0xE00` .. `csiphy3+0xE00` all read 0 and drop writes).  So the 18
+`0xE00` records in the vendor table are not addressable at `csiphyN + 0xE00` on this
+SoC - the table is shared across platforms and that group does not apply here.
+
+Within a lane block, blocks 0x800 and 0xC00 accept the 0x90/0x94/0x98 group while
+0x000 and 0x400 drop it, i.e. per-lane analogue registers are gated by the lane
+power state, which is exactly the dynamic part the vendor driver writes at
+stream-on and which is not in the table.
+
+Conclusion for the next round: the static register tables are now exhausted.  The
+missing piece is the **dynamic programming sequence** (lane power, settle, CSR
+start) in the vendor's `cam_csiphy_*`/`cam_ife_csid_*` functions, which has to come
+from disassembling `camera.ko` (it keeps its symbols: `cam_ife_csid_hw_ver1_hw_cfg`,
+`cam_ife_csid_hw_ver2_init`, `cam_csiphy_*`).
