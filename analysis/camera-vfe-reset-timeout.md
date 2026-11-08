@@ -446,3 +446,37 @@ Remaining explanations, in order of likelihood:
 Cheapest next discriminator: bring up the wide IMX586 (same csiphy/csid/vfe path,
 independent sensor) - if it also produces no traffic the fault is in the shared
 path; if it does, the OV8856 mode/stream-on is at fault.
+
+## The sensor really streams; the PHY's global block is inert
+
+Sensor-side proof, read back through the driver right after stream-on:
+
+```
+ov8856 3-0036: stream state: 0x0100=0x01 0x4800=0x44 0x4801=0x00 0x4808=0x1a
+```
+
+`0x0100 = 0x01` is the streaming mode bit and `0x4800 = 0x44` has the MIPI output
+enabled, so the module is transmitting (its chip id, rails, MCLK and I2C were
+already proven).  Hypothesis "the sensor never started" is therefore dead.
+
+CSIPHY2 census during that same stream (vendor block layout, 0x400 stride):
+
+| block | non-zero registers | write test |
+|---|---|---|
+| 0x000 | 14 | writes to 0x90/0x94/0x98 **do not stick** |
+| 0x400 | 12 | writes **do not stick** |
+| 0x800 | 11 | writes stick (`0x94 = 0xd7` persists) |
+| 0xC00 | 11 | partial |
+| **0xE00** | **0** | not programmed at all |
+
+So the vendor sequence lands only in the lane blocks whose clocks are open, and the
+**global 0xE00 block is completely inert** - it holds none of the vendor's 18 global
+records (0xE00/0xE04/0xE08/0xE0C/0xE10/0xE14/0xE1C/0xE20/0xE28/0xE2C/0xE30/0xE34/
+0xE38/0xE3C/0xE90/0xE94/0xE98/0xEA0) and rejects writes.
+
+That block most likely holds the PHY PLL / lane-clock enables, which explains why
+only one lane block is live and no CSI-2 activity reaches CSID.  Next step: find
+what gates 0xE00 (a separate "csiphy top" power/clock, or a CAMCC BCR/clock we have
+not enabled - the vendor csiphy node lists `cphy_rx_clk_src`, `csiphyN_clk`,
+`csiNphytimer_clk_src` and `csiNphytimer_clk`, and only the two gate clocks plus the
+shared `cphy_rx` are currently taken).
