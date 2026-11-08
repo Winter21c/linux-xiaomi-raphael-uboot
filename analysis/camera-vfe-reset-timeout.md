@@ -172,3 +172,40 @@ family - which is `vfe_ops_170`.  Switching the four SM8150 VFE entries to
 blocks waiting for a buffer), but **no frames arrive** and the CSID0 interrupt
 count stays 0, so nothing is coming out of the sensor yet - next layer is the
 sensor's own stream-on (its I2C mode write and the CSIPHY/CSI-2 start).
+
+## Sensor stream-on verified; the CSI-2 link still delivers nothing
+
+With the pipeline starting cleanly, the sensor side is now instrumented and
+healthy:
+
+```
+ov8856 3-0036: ov8856 s_stream(1) called
+ov8856 3-0036: ov8856 start_streaming -> 0
+cam_cc_csiphy2_clk 400000000 (ac65000.camss)
+```
+
+so the mode writes over CCI succeed and the PHY clock is on.  But `msm_csid0`
+(SPI 496) and `msm_csiphy2` (SPI 511) interrupt counts stay **0**: no CSI-2 traffic
+exists between sensor, PHY and CSID.
+
+Two configuration bugs were found and fixed while chasing this:
+
+| bug | evidence | fix |
+|---|---|---|
+| CSIPHY had **no supplies at all** | `csiphy_res_sm8150[]` had no `.regulators`, so nothing ever enabled the MIPI CSI 1.2 V rail even though the vendor DT wires `mipi-csi-vdd-supply = <&pm8150l_l3>` | added `vdda-phy`/`vdda-pll` to all four entries and `vdda-phy-supply`/`vdda-pll-supply = <&vreg_l3c_1p2>` (phandle 0x72) to the camss node |
+| CSIPHY used the **3-phase** ops | `csiphy_res_sm8150[]` pointed at `csiphy_ops_3ph_1_0` (msm8996-era C-PHY/3-phase), while SM8250 and every D-PHY sensor use `csiphy_ops_2ph_1_0`, and the vendor calls this block `qcom,csiphy-v1.1` | switched all four entries to `csiphy_ops_2ph_1_0` |
+
+Remaining suspects for the empty link:
+
+1. **lane count**: the sensor node declares `data-lanes = <0 1>` (2 lanes).  The
+   OV8856 mode in use is 1640x1232, which mainline drives with 2 lanes, but if the
+   module is wired for 4 the PHY never locks.  Try `data-lanes = <0 1 2 3>` and the
+   3280x2464 mode together.
+2. **sensor PLL / INCK**: the mode table assumes a specific INCK; the DT sets
+   19.2 MHz.  If the sensor actually runs at 24 MHz the bitrate is wrong and CSID
+   cannot sync.
+3. **CSIPHY programming for SM8150** may differ from SM8250's `2ph_1_0` sequence
+   (the vendor calls its block v1.1).
+
+Useful diagnostic next: read the sensor's chip id over CCI *while streaming*; an ACK
+proves the module is powered and receiving clocks at that moment.
