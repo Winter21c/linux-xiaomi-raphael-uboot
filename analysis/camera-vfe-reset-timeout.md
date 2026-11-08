@@ -142,3 +142,33 @@ subdev `s_stream` start.
 The **lite** VFE (VFE2/VFE3) stays inert (all writes lost), so for now only the
 full VFE0/VFE1 paths are worth using; that still covers every CSI-2 input because
 any csiphy can be linked to any csid and csid0/csid1 feed vfe0/vfe1.
+
+## Two more real bugs fixed: the tool's fourcc map and the wrong VFE hw_ops
+
+**1. EPIPE was a tool bug, not a driver bug.** `tools/mcam.c` resolved format
+names with a small table plus `strtoul`, so `pgAA` (the packed form of the
+sensor's `0x300a` = MEDIA_BUS_FMT_SGRBG10_1X10) became 0, `S_FMT` fell back to the
+driver default `UYVY`, and `STREAMON` then failed the pix-vs-subdev-format check in
+`camss-video.c` (`-EPIPE`).  After mapping `pBAA/pGAA/pgAA/pRAA/pBCC` to the
+`V4L2_PIX_FMT_*P` values the video node keeps `pgAA`.
+
+**2. `vfe_ops_480` does not fit the SM8150 register window.** That ops set puts the
+BUS block at `0xaa00` and maps RDI wm `0` to wm `23`, so `vfe_wm_start()` writes
+`0xaa00 + 0x20c + 23 * 0x100 = 0xC30C` - far outside the 0x4000 window the SM8150
+VFE owns (`0xacaf000..0xacb2fff`, with csid0 right after it, so the window cannot
+simply be enlarged).  The result was a data abort:
+
+```
+Internal error: Oops: 0000000096000047 [#1] SMP
+pc : vfe_wm_start+0xc0/0x258 [qcom_camss]
+    vfe_enable_output_v2 -> vfe_enable_v2 -> vfe_set_stream -> video_start_streaming
+```
+
+SM8250 maps its VFE as **0xd000**; SM8150's own DT says `qcom,vfe175` - the 1.7x
+family - which is `vfe_ops_170`.  Switching the four SM8150 VFE entries to
+`vfe_ops_170` removes the crash and the pipeline now starts.
+
+**Current state:** `S_FMT` keeps `pgAA`, `STREAMON` succeeds (no error, the tool
+blocks waiting for a buffer), but **no frames arrive** and the CSID0 interrupt
+count stays 0, so nothing is coming out of the sensor yet - next layer is the
+sensor's own stream-on (its I2C mode write and the CSIPHY/CSI-2 start).

@@ -267,3 +267,17 @@ acknowledged; the pipeline then reaches CSID0 (reset also a warning) and
 
 The lite VFE2/VFE3 remains inert (writes lost) - avoid it; route every sensor
 through csid0/csid1 into vfe0/vfe1.
+
+
+## Round 34: STREAMON succeeds, waiting for the first CSI-2 data
+
+Two bugs fixed:
+* `tools/mcam.c` did not know `pgAA`, so the video node silently kept UYVY and
+  `STREAMON` failed with EPIPE at camss-video's format check;
+* `vfe_ops_480` writes BUS registers at 0xaa00 + 23*0x100 = 0xC30C, outside the
+  0x4000 SM8150 VFE window -> data abort in `vfe_wm_start`.  SM8150's own DT calls
+  the block `qcom,vfe175`, i.e. the 1.7x family -> use `vfe_ops_170`.
+
+Now: format sticks (pgAA), `STREAMON` succeeds, the tool waits for a buffer, but no
+frame arrives and the CSID0 IRQ count is 0 - the sensor is not emitting CSI-2 data
+yet.  Next: verify the OV8856 stream-on (mode write over CCI, MCLK, csiphy start).
