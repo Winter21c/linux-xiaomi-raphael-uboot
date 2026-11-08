@@ -279,3 +279,33 @@ Next probes:
 2. try `data-lanes = <0 2>` so the hard-coded clock lane 1 does not collide,
 3. compare the 2ph_1_0 register offsets against the vendor's `csiphy-v1.1`
    expectations (the vendor driver source is not public, so this needs probing).
+
+## CSID is programmed correctly by the driver but its registers read 0
+
+`csid_set_stream()` now prints the driver-side state and the hardware registers:
+
+```
+csid0 state: en_vc=0x1 need_vc=0 lane_cnt=2 lane_assign=0x21 csiphy_id=2 phy_ok=1
+csid0 rx:    cfg0=0x00000000 rxirq=0x00000000 top=0x00000000 phycfg=0x00000000
+csid0 hw_version reg(0x0)=0x00000000
+```
+
+So the driver knows everything it needs (one virtual channel, 2 lanes, lane map
+0x21, fed by csiphy2) and `configure_stream()` was even forced to run
+unconditionally, yet `CSID_CSI2_RX_CFG0` reads back 0 - the write never lands.
+
+`csid_res_sm8150` was tried with **both** `csid_ops_gen2` (SM8250) and
+`csid_ops_4_7`: gen2 never issues a reset at all (it only masks IRQs and waits),
+4_7 issues one and times out, and in both cases every CSID register still reads 0
+while the interrupt counter stays at 0.
+
+Same signature as the lite VFE2/VFE3 earlier: block reads 0, writes lost, no IRQ.
+The full VFE0 is the only camss block that behaves like real hardware
+(`hw_version=0x10020000`, writes stick, IRQ 497 fires).
+
+Working hypothesis: on SM8150 the CSID and the lite VFE sit behind an additional
+gate that mainline camss never opens (the vendor's `qcom,cam-cpas@ac40000` /
+`camnoc` block at 0xac40000 has no mainline driver, and the vendor CSID node lists
+`cphy_rx_clk_src` + `ife_cphy_rx_clk` for a *second* domain).  Until that gate is
+found, the CSI-2 path cannot carry data even though the sensor, PHY power and all
+clocks look correct from the driver's point of view.
