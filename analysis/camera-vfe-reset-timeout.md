@@ -405,3 +405,44 @@ sequence: 103 records of `{offset, value, mask, delay}`, listed in
 `vendor-re/vendor-register-tables.md`.  Upstream's `csiphy_ops_2ph_1_0` uses a
 different layout (it writes `GLBL_PWR_CFG` 0x144, `GLBL_RESET` 0x140, lane
 `CFG2` 0x004+0x40n), so porting this table is the next step for the PHY.
+
+## Vendor CSID map + vendor CSIPHY sequence applied; traffic still zero
+
+This round integrated both vendor artefacts:
+
+1. `camss-csid-gen2.c` now uses the **vendor 175_200 map** (cgc_ovd 0x04,
+   core_cfg 0x08, core_ctrl 0x0c with the lane count/assignment, rst_cmd 0x10,
+   rst_strobes 0x14 instead of 0x10).
+2. `camss-csiphy-2ph-1-0.c` now replays the **vendor D-PHY v1.1 init sequence**
+   (103 records, `csiphy_2ph_1_1_seq`) after its own writes, since SM8150 uses a
+   0x400 lane stride and a 0xe00 global block instead of upstream's 0x40 stride.
+
+Evidence the sequence really runs (post-program dump changed):
+
+```
+csiphy post pwr=0x0000000d rst=0x0 irqcmd=0x0
+            ln0cfg2=0x0000000c   <- vendor record 0x04=0xc landed (was 0x10)
+            ln1cfg2=0x00000010 ln2cfg2=0x00000010 clkcfg2=0x00000000
+```
+
+But `msm_csiphy2` (SPI 511) and `msm_csid0` (SPI 496) counters **remain 0**, and
+`STREAMON` still returns no buffer.  So neither the CSID nor the PHY register map
+was the last blocker - the link carries nothing even though:
+
+* the sensor reports `start_streaming -> 0` and answers I2C,
+* MCLK1 runs at 19.2 MHz and all sensor rails are on,
+* CSID reads `hw_version=0x10000000` and its core_ctrl now holds the lane map,
+* the PHY accepts and keeps the vendor init values.
+
+Remaining explanations, in order of likelihood:
+
+1. the sensor does not actually transmit (its stream-on register may be written but
+   the MIPI output stage left disabled, or the mode table does not match the module);
+2. the CSI-2 lanes are wired differently from `data-lanes = <1 2>` (the PHY would
+   then see nothing while everything reads back fine);
+3. a CAMSS-top/CPAS gate that no mainline code opens (the vendor CPAS block still
+   reads 0/32 and there is no mainline driver for it).
+
+Cheapest next discriminator: bring up the wide IMX586 (same csiphy/csid/vfe path,
+independent sensor) - if it also produces no traffic the fault is in the shared
+path; if it does, the OV8856 mode/stream-on is at fault.
