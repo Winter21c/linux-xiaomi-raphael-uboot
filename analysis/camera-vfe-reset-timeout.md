@@ -243,3 +243,39 @@ Remaining hypotheses, cheapest first:
    not that the sensor drives its clock lane.  A scope/logic-analyzer on the module
    connector (or reading the PHY's lane status registers after a 100 ms delay) would
    settle it.
+
+## CSIPHY: writes stick, version reads 0, no traffic
+
+Corrected register dump (the earlier one used wrong offsets - `GLBL_PWR_CFG` is
+0x144, `GLBL_RESET` 0x140, `HW_VERSION` 0x188, lane n `CFG2` at `0x004 + 0x40*n`):
+
+```
+csiphy pre  link=360000000 settle=36 mask=0x06 num_data=2 clk_pos=0 data_pos=1,2
+csiphy post pwr=0x0000000d rst=0x00000000 irqcmd=0x00000000
+             ln0cfg2=0x00000000 ln1cfg2=0x00000010 ln2cfg2=0x00000010
+             clkcfg2=0x00000000 irqsts0=0x0 irqsts1=0x0
+CSIPHY HW Version = 0x00
+```
+
+* the writes **do** reach the block (`pwr` reads back exactly the written
+  `0x1 | mask<<1`, and the two data lanes hold the 0x10 we wrote),
+* `HW_VERSION` (0x188) reads **0x00**, which is not a plausible PHY version,
+* the clock lane is never programmed: `CAMSS_CSI_PHY_LN_CLK` is **hard-coded to 1**
+  in `camss-csiphy-2ph-1-0.c`, so with `data-lanes = <1 2>` the clock lane write
+  collides with data lane 1 and lane 3 stays untouched (`clkcfg2 = 0`).
+
+Also added the missing `cphy_rx` clock (CAM_CC_CPHY_RX_CLK_SRC = 25) to the four
+csiphy resources and to the camss DT clock list; the PHY still reports nothing.
+
+Interpretation: register access works, so the block is powered and clocked, but
+either 0x188 is not the version register on SM8150's `csiphy-v1.1` (i.e. **the
+register map differs from SM8250's 2ph_1_0**) or the PHY never sees the sensor's
+clock lane.  The lane-mask collision above is a real configuration bug regardless.
+
+Next probes:
+1. read `CSID_CSI2_RX_IRQ_STATUS`/`CSID_CSI2_RX_CFG0` after a stream start to see
+   whether the CSID sees "clock lane not in high-speed" (sensor silent) versus
+   "lane errors" (signal present but wrong),
+2. try `data-lanes = <0 2>` so the hard-coded clock lane 1 does not collide,
+3. compare the 2ph_1_0 register offsets against the vendor's `csiphy-v1.1`
+   expectations (the vendor driver source is not public, so this needs probing).
