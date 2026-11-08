@@ -174,10 +174,15 @@ stage_imx586-probe() {
 run_stage() {
 	local s=$1
 	case "$s" in
+	post-mortem)      stage_post-mortem ;;
+	preflight)        stage_preflight ;;
+	regress)          stage_regress ;;
 	recover)          stage_recover ;;
 	media-order)      stage_media-order ;;
 	media-variantC)   stage_media-variantC ;;
+	front-build)      stage_front-build ;;
 	front-scan)       stage_front-scan ;;
+	ultra-scan)       stage_ultra-scan ;;
 	imx586-build)     stage_imx586-build ;;
 	imx586-probe)     stage_imx586-probe ;;
 	*) echo "unknown stage: $s"; return 2 ;;

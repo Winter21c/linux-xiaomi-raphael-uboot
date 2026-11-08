@@ -114,3 +114,48 @@ with `CAMU_*`, i.e. **front = CSIPHY1 / CCI0 master0 / MCLK2 gpio15 / reset
 gpio12 / VDIG_EN gpio95** and ultrawide = CSIPHY3 / CCI1 master0 / MCLK3 gpio16 /
 reset gpio23 / VDIG_EN gpio34.  An earlier note in this file had the two swapped;
 this entry supersedes it.
+
+
+## 2026-11-08 R10. The frozen phone was the modem, not the camera
+
+`journalctl -k -b -1` from a wedged boot shows RCU stalls and
+"Sending NMI from CPU 6 to CPUs 3 / After 10 seconds, these CPUS still haven't
+responded to the NMI: 3" with **no WCSS lines in the tail** - but the decisive
+evidence came the other way round: a *fresh* boot with no camera module loaded
+froze again within ~2 minutes, while the same DTB with `&remoteproc_mpss {
+status = "disabled"; }` stayed up for 11+ minutes with normal load.
+
+So the modem (WCSS) crash loop comes back whenever the guard service cannot stop
+it fast enough, and it hard-locks a CPU.  With mpss disabled in the DT the system
+is stable and the whole camera stack (cci + camss + ov8856) loads with
+`v4l-subdev22 = ov8856 4-0036` linked to csiphy2 - the async link that was
+blamed for the freeze was innocent.
+
+Cost of disabling mpss: no WiFi / BT / cellular until a working WLAN firmware
+path exists.  `kernel.panic = 15` is now persisted via
+`/etc/sysctl.d/99-raphael-panic.conf`, so a real panic reboots the phone by
+itself (it did twice).
+
+## 2026-11-08 R11. Streaming blockers found by actually trying it
+
+1. **32-bit DMA mask**: `camss.c` used `dma_set_mask_and_coherent(dev,
+   0xffffffff)`, which pushed every multi-MB frame buffer through the swiotlb
+   bounce buffer -> `swiotlb buffer is full (sz: 2097152 bytes)`.  Changed to
+   `DMA_BIT_MASK(64)`; buffers now allocate.
+2. **Wrong power-domain order**: the driver attaches the block GDSC with
+   `dev_pm_domain_attach_by_id(genpd_num - 1)`, i.e. it requires TITAN_TOP to be
+   *last*, and attaches the per-IFE domains by name.  The DTB listed
+   `"top", "ife0", "ife1"` (top first), so id 2 resolved to ife1 and no IFE GDSC
+   was ever enabled.  Fixed the DTB order to `ife0, ife1, top` and gave VFE0/VFE1
+   `has_pd = true` + `pd_name = "ife0"/"ife1"`.
+3. **Still open**: `VFE reset timeout` on every attempt, and the clock log shows
+   the *lite* VFE's clock pair (`ife_lite`, `ife_lite_axi`) being enabled even for
+   `/dev/video0` (`msm_vfe0_video0`), i.e. the video node seems bound to a lite
+   VFE resource while its name says vfe0.  That mismatch is the next thing to
+   chase; the video node format also comes back as UYVY even when the packed Bayer
+   format matching the sensor (`0x300a` = MEDIA_BUS_FMT_SGRBG10_1X10 -> `pgAA`) is
+   requested.
+
+Tool written for this: `tools/mcam.c` (builds on the device) - links,
+link enable, subdev get/fmt, video caps/enumfmt/mfmt/mstream, because the image
+has neither media-ctl nor v4l2-ctl.
