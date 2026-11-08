@@ -159,3 +159,22 @@ itself (it did twice).
 Tool written for this: `tools/mcam.c` (builds on the device) - links,
 link enable, subdev get/fmt, video caps/enumfmt/mfmt/mstream, because the image
 has neither media-ctl nor v4l2-ctl.
+
+
+## 2026-11-08 R12. Never rebuild the raphael DTB from source (display)
+
+Rebuilding the device tree from the kernel source loses the display: the branch
+source says the panel is `samsung,ea8076` (+ vcie-supply) while the DTB the image
+actually boots says `samsung,ams639rq08` (+ vdd3p3/vsn/vsp).  With the source
+version `/sys/class/drm/` stays empty (no card0, no desktop).  The camera DTB must
+therefore be produced by decompiling the shipped DTB and adding only the camera
+nodes with raw phandles - recipe in `camera/README-DTB.md`.
+
+Same round: the modules the phone boots are the ones installed under
+`/lib/modules`; `/root/camss-final/qcom-camss.ko` is only used on explicit insmod.
+Every camera build must be copied there before a reboot test, otherwise an old
+build is being measured.
+
+Also: reading VFE registers at probe time (`readl` before the block is powered)
+crashes the phone - it panicked and reboot-recovered twice.  Register access is
+only safe after the clocks/power are on.
