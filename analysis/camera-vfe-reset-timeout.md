@@ -547,3 +547,26 @@ cam_csiphy_release_from_reset_state 0x175144
 cam_ife_csid_hw_ver1_hw_cfg       0x86cac
 cam_ife_csid_hw_ver2_init         0x95b94
 ```
+
+## 0xac6a000 is not a register block; probing neighbours wedges the phone
+
+With the pipeline verifiably powered (VFE0 IRQ count 11 and climbing), a probe of
+0xac6a000 read 0 and dropped writes at 0x000/0x010/0x018/0x01c/0x084, so that
+address is not the CSIPHY top block either.
+
+Extending the probe to the neighbouring candidates 0xac69000 and 0xac6b000
+**hard-crashed the phone**: `ping` stops answering, SSH reports "no route to host",
+the USB gadget still enumerates (stable device number) but the network interface
+never returns.  Reading a clock-gated/unimplemented Qualcomm block raises an
+external abort; this is the second time an out-of-range camera probe has taken the
+machine down.
+
+Safety rule for further probing: only ever touch addresses listed in the vendor DT
+(`csiphy0..3` 0xac65000/66000/67000/68000, `csid0..3`, `vfe0/1`, `vfe_lite0/1`,
+`cci`, `cpas` 0xac40000, `camnoc` 0xac42000) and only while titan_top is powered.
+Unknown addresses must be treated as fatal.
+
+Where the vendor `csiphy_common_reg_2_1_1` offsets (0x1018/0x101c/0x1084) point is
+therefore still unknown.  Next attempt should avoid blind address sweeps: instead
+disassemble `cam_csiphy_program_common_registers` (0x178308) and follow which base
+pointer it adds the offsets to, since the driver holds the answer.
