@@ -110,3 +110,35 @@ Leads, in order of likelihood:
 Reproduction: `tools/mcam.c` builds on the device; the pipeline is
 `ov8856 (3-0036) -> csiphy2 -> csid2 -> vfe2_rdi0`, formats 1640x1232 / `0x300a`,
 video node `msm_vfe2_video0` (currently `/dev/video8`).
+
+## The full VFE0 block IS alive (round 33)
+
+With the pipeline routed through the **full** VFE0 (csiphy2 -> csid0 -> vfe0_rdi0)
+instead of the lite VFE2, the picture changes completely:
+
+```
+raphael-reset: sweep on VFE0 (lite=0), ack_off=0x54
+after SM8250 write cmd=0x00000001 mask=0x00000001 status=0x00000000
+VFE0 hw_version=0x10020000
+```
+
+* **writes stick** (`GLOBAL_RESET_CMD` and `VFE_IRQ_MASK(0)` read back exactly what
+  was written, unlike the lite instance which reads back 0),
+* `hw_version = 0x10020000` is a real version (generation 1, minor 2),
+* **the interrupt does fire**: `/proc/interrupts` for `msm_vfe0` (SPI 497) went
+  1 -> 2 between attempts.
+
+So the VFE is functional; the remaining defect is that the ISR does not recognise
+the reset acknowledgement (`status & IRQ_MASK_0_RESET_ACK` where the SM8250 code
+uses BIT(0) for a full VFE and BIT(17) for a lite one), so the completion never
+fires even though the interrupt arrives.
+
+Workaround in place (`camss-vfe-480.c`): log the real status the first time and
+treat a pending reset as acknowledged.  With that, VFE0 passes the reset stage and
+the pipeline proceeds to CSID0, whose reset also times out (now a warning), after
+which `STREAMON` returns **EPIPE** - the next layer to chase, i.e. the actual
+subdev `s_stream` start.
+
+The **lite** VFE (VFE2/VFE3) stays inert (all writes lost), so for now only the
+full VFE0/VFE1 paths are worth using; that still covers every CSI-2 input because
+any csiphy can be linked to any csid and csid0/csid1 feed vfe0/vfe1.

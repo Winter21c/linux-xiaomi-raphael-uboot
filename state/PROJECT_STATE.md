@@ -252,3 +252,18 @@ the last freeze was the modem WCSS loop or the camera async link - then
   reads back 0 across 10 candidate reset offsets, so no reset-ack and no IRQ.
   Next leads: VFE GDSC coverage (no ife_lite GDSC exists in camcc-sm8150),
   CAMSS top/CPAS registers the vendor DT has and mainline ignores, CAMCC resets.
+
+
+## Round 33: full VFE0 is alive, only the reset-ack bit is misread
+
+Using csiphy2 -> csid0 -> vfe0_rdi0 instead of the lite VFE2 changes everything:
+VFE0 accepts register writes (cmd/mask read back), `hw_version=0x10020000`, and
+`/proc/interrupts` for SPI 497 **increments**, so the VFE works and only the
+reset-ack identification is wrong (SM8250 expects BIT(0) full / BIT(17) lite).
+
+`camss-vfe-480.c` now logs the real status and treats a pending reset as
+acknowledged; the pipeline then reaches CSID0 (reset also a warning) and
+`STREAMON` fails with EPIPE, which is the next layer (subdev s_stream start).
+
+The lite VFE2/VFE3 remains inert (writes lost) - avoid it; route every sensor
+through csid0/csid1 into vfe0/vfe1.
