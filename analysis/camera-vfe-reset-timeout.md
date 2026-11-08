@@ -507,3 +507,43 @@ missing piece is the **dynamic programming sequence** (lane power, settle, CSR
 start) in the vendor's `cam_csiphy_*`/`cam_ife_csid_*` functions, which has to come
 from disassembling `camera.ko` (it keeps its symbols: `cam_ife_csid_hw_ver1_hw_cfg`,
 `cam_ife_csid_hw_ver2_init`, `cam_csiphy_*`).
+
+## New lead: the CSIPHY "common" registers are at 0x1018/0x101c/0x1084
+
+Disassembling the vendor `camera.ko` (it keeps its symbols) turned up the per-version
+**common register list** (`csiphy_common_reg_2_1_1`, 3 records of
+`{offset, value, mask, delay}`):
+
+```
+0x1084 = 0x00
+0x1018 = 0x01
+0x101c = 0x7a
+```
+
+and the code path that consumes it is `cam_csiphy_config_dev` -> `cam_io_w_mb()`
+(the same helper the 103-record lane table goes through), with
+`cam_csiphy_update_lane_selection()` doing a read-modify-write of a single lane mask
+register.
+
+Two consequences:
+
+1. **the CSIPHY register window must be larger than the 0x1000 our DT gives it** -
+   0x1018/0x101c/0x1084 are past the end of every `csiphyN` window, which is
+   consistent with every 0xE00/0xE28/0xE90 read returning 0: the block is simply not
+   mapped there;
+2. those offsets look like they belong to a **"csiphy top" block at 0xac6a000**
+   (the address our camss node uses only as a name and never maps).  A probe of
+   `0xac6a000 + {0x10,0x18,0x1c,0x84}` could not be completed this round (the module
+   produced no output), so this is the first thing to retry.
+
+Relevant vendor symbols for the next round of RE:
+
+```
+cam_csiphy_config_dev             0x176af4   applies the lane table via cam_io_w_mb
+cam_csiphy_update_lane_selection  0x17a5bc   RMW of the lane mask register
+cam_csiphy_program_common_registers 0x178308  the common (0x10xx) records
+cam_csiphy_get_settle_count       0x177b6c
+cam_csiphy_release_from_reset_state 0x175144
+cam_ife_csid_hw_ver1_hw_cfg       0x86cac
+cam_ife_csid_hw_ver2_init         0x95b94
+```
