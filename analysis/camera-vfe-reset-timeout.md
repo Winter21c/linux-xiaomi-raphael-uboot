@@ -327,3 +327,36 @@ at all, with `ife_0_csid_clk` enabled at 400 MHz and `ife_0_gdsc` + `titan_top_g
 powered.  The vendor's `qcom,cam-cpas@ac40000` block (cam_cpas_top + cam_camnoc),
 which mainline camss never drives, remains the prime suspect for the missing gate,
 but it cannot be probed while collapsed.
+
+## Definitive: CSID0 rejects every register write (method validated on VFE0)
+
+A probe module writes `tag | offset` into each register of a block and reads it back.
+Validation on the block we know works:
+
+```
+poke: vfe0[0x5c] HOLDS 0x5a5a005c
+poke: vfe0 held 1 offsets in [0x0,0x60)
+poke: csid0 held 0 offsets in [0x0,0x60)
+```
+
+So the method is sound (VFE0 keeps a written value) and **CSID0 keeps nothing** -
+0 of 24 offsets - while running a stream, with `cam_cc_ife_0_csid_clk` enabled at
+400 MHz, `cam_cc_ife_0_clk` at 400 MHz, `ife_0_gdsc` and `titan_top_gdsc` powered
+and the driver-side CSID state fully populated (`en_vc=0x1`, `lane_cnt=2`,
+`lane_assign=0x21`, `csiphy_id=2`).
+
+Additional negative results from this round:
+
+* the **CSID test-pattern generator** (V4L2_CID_TEST_PATTERN = 0x009f0903 set to 1)
+  produces no frame and no interrupt either, i.e. the CSID cannot even source data
+  from its own TPG;
+* the vendor's `qcom,cam-cpas@ac40000` (cam_cpas_top) and `camnoc`@0xac42000 read
+  **0/32 non-zero words** while the camera domain is powered, so they are not
+  configured (and touching them while collapsed raises an external abort);
+* the four CAMCC clock sets for IFE0 are all on during the stream, so this is not a
+  clock-enable problem.
+
+Conclusion: on SM8150 the CSID block needs an initialisation that mainline camss
+does not perform and that is not derivable from the public tree (the vendor's
+camera driver is absent from raphael-p-oss).  VFE0 alone is not enough to capture
+CSI-2, so **no camera can stream on mainline until the CSID is brought up**.
