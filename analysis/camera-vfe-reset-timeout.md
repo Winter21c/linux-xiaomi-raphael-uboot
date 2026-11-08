@@ -209,3 +209,37 @@ Remaining suspects for the empty link:
 
 Useful diagnostic next: read the sensor's chip id over CCI *while streaming*; an ACK
 proves the module is powered and receiving clocks at that moment.
+
+## Link is quiet although every stage reports success
+
+Measured during a live stream (via a temporary `i2creg`/clk readout):
+
+| stage | state |
+|---|---|
+| sensor `s_stream(1)` | called, `ov8856_start_streaming -> 0` (PLL + mode tables written, chip id re-verified) |
+| sensor rails | viodd/BOB/S8(GPIO93)/L17 on, `vreg_l3c_1p2` (MIPI CSI 1.2 V) enabled with 2 users |
+| MCLK1 | enabled at 19200000 Hz, consumer `3-0036` |
+| csiphy2 clock | 400000000 Hz |
+| csiphy2 IRQ (SPI 511) | 0 |
+| csid0 IRQ (SPI 496) | 0 |
+| VFE0 IRQ (SPI 497) | only the reset-time hits |
+
+`video_start_streaming()` walks the pipeline backwards and calls `s_stream(1)` on
+each entity; the sensor runs **last**, so csiphy2/csid0/vfe0 all accepted the call.
+Everything says "started", yet no CSI-2 clock or data activity appears at the PHY.
+
+Lane numbering was also corrected (`clock-lanes = <0>`, `data-lanes = <1 2>`,
+previously `<7>` and `<0 1>`), with no change.
+
+Remaining hypotheses, cheapest first:
+
+1. **CSIPHY settle/link-frequency**: `csiphy_settle_cnt_calc()` derives the settle
+   window from the DT `link-frequencies` (720/360 Mbps) and the timer clock.  If the
+   real rate differs the PHY never locks; try the second entry / a different rate.
+2. **csiphy ops for SM8150**: `csiphy_ops_2ph_1_0` is the SM8250 sequence while the
+   vendor block is `qcom,csiphy-v1.1`; a wrong PLL/post-init write would leave the
+   PHY idle.  Compare the register writes against the vendor's expected sequence.
+3. **sensor output enable**: everything so far proves the I2C/register side works,
+   not that the sensor drives its clock lane.  A scope/logic-analyzer on the module
+   connector (or reading the PHY's lane status registers after a 100 ms delay) would
+   settle it.
