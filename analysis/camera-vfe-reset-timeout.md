@@ -570,3 +570,29 @@ Where the vendor `csiphy_common_reg_2_1_1` offsets (0x1018/0x101c/0x1084) point 
 therefore still unknown.  Next attempt should avoid blind address sweeps: instead
 disassemble `cam_csiphy_program_common_registers` (0x178308) and follow which base
 pointer it adds the offsets to, since the driver holds the answer.
+
+## Host-side RE while the phone is wedged
+
+The phone still needs a power cycle, so this round was disassembly only.
+
+`cam_csiphy_register_baseaddress` (0x17b554) simply stores `csiphy->base`
+(`[x0,#1168]`) into a global per-instance array with a 0x78-byte stride; it does not
+map anything itself, so the mapping comes from the DT `reg` (`0xac65000 + n*0x1000`,
+size 0x1000) through `cam_soc_util_*`.
+
+`__csiphy_prgm_common_data` (0x17c1f4) takes `(instance, table, count, ...)`, fetches
+the same per-instance base pointer and walks 16-byte `{offset, value, mask, delay}`
+records - i.e. the common-register table is applied to `csiphy->base` too.
+
+That makes the `csiphy_common_reg_2_1_1` offsets (0x1018/0x101c/0x1084) impossible to
+reach inside a 0x1000 window, so either:
+* those records simply do not apply to SM8150 (the table is shared across SoC
+  generations), or
+* the vendor maps a larger window than its DT declares and the extra 0x18/0x1c/0x84
+  after 0x1000 belong to a companion block that is not described in DT at all.
+
+Blind probing already cost two wedges, so the next attempt must not sweep addresses.
+The practical way forward is to give the CSIPHY a **0x2000 window in our own DTB**
+(our driver maps what we tell it; nothing else claims 0xac67000..0xac68fff because
+mainline camss uses 0x1000 strides) and re-apply the common records there - a single
+targeted change instead of guessing.
