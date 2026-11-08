@@ -360,3 +360,48 @@ Conclusion: on SM8150 the CSID block needs an initialisation that mainline camss
 does not perform and that is not derivable from the public tree (the vendor's
 camera driver is absent from raphael-p-oss).  VFE0 alone is not enough to capture
 CSI-2, so **no camera can stream on mainline until the CSID is brought up**.
+
+## CORRECTION + breakthrough: the CSID is alive; mainline used the wrong register map
+
+The vendor camera module `camera.ko` was extracted from the HyperOS (Mi 9 / dada,
+also SM8150) `vendor_dlkm` partition and its register tables dumped into
+`raphael-support/camera/vendor-re/vendor-register-tables.md`.
+
+With the block powered (a stream running), the CSID answers:
+
+```
+csid_gate: initial         hw_ver=0x10000000  cgc_ovd=0x00000000
+csid_gate: after cgc_ovd=1 hw_ver=0x10000000  cgc_ovd=0x00000001
+```
+
+So **`CSID_HW_VERSION` reads 0x10000000 and register writes do land** - the
+earlier "CSID rejects every write" conclusion was a false negative: the probe wrote
+`0xA5A50004` into registers with masked fields (0x04 only implements a couple of
+bits), so a mismatch was expected even on a healthy block.
+
+### The vendor 175_200 map vs upstream gen2
+
+| register | vendor `cam_ife_csid_175_200_cmn_reg_info` | upstream `camss-csid-gen2.c` |
+|---|---|---|
+| hw_version | 0x00 | 0x00 |
+| **cgc_ovd** | **0x04** | *missing* |
+| **core_cfg** | **0x08** | *missing* |
+| **core_ctrl** | **0x0c** | *missing* (upstream never programs lane count/assign in core_ctrl) |
+| **rst_cmd** | **0x10** | *missing* (gen2 never triggers a reset) |
+| **rst_strobes** | **0x14** | **0x10** (i.e. upstream writes strobes into rst_cmd) |
+| csi2 irq status/mask/clear/cmd | 0x20/0x24/0x28/0x2c | 0x20/.. matches |
+| csi2 rx_cfg0/1 | 0x100/0x104 | matches |
+| top irq status/mask/clear | 0x70/0x74/0x78 | matches |
+
+`camss-csid-gen2.c` was therefore patched to the vendor map (cgc_ovd, core_cfg,
+core_ctrl, rst_cmd, rst_strobes at the vendor offsets, plus the lane
+count/assignment write into `CORE_CTRL`).  `csid_res_sm8150` uses `csid_ops_gen2`
+again.
+
+### Also extracted
+
+`csiphy_2ph_v2_1_1_reg` - the vendor's **CSIPHY D-PHY v1.1** initialisation
+sequence: 103 records of `{offset, value, mask, delay}`, listed in
+`vendor-re/vendor-register-tables.md`.  Upstream's `csiphy_ops_2ph_1_0` uses a
+different layout (it writes `GLBL_PWR_CFG` 0x144, `GLBL_RESET` 0x140, lane
+`CFG2` 0x004+0x40n), so porting this table is the next step for the PHY.
