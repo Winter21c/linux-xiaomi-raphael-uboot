@@ -281,3 +281,27 @@ Two bugs fixed:
 Now: format sticks (pgAA), `STREAMON` succeeds, the tool waits for a buffer, but no
 frame arrives and the CSID0 IRQ count is 0 - the sensor is not emitting CSI-2 data
 yet.  Next: verify the OV8856 stream-on (mode write over CCI, MCLK, csiphy start).
+
+
+## Round 46: device wedged, host-side preparation complete
+
+The phone has been unreachable since round 43 (same USB device number, `ping`
+fails, SSH has no route) after an MMIO probe of 0xac69000/0xac6b000 - addresses
+outside the vendor DT list.  It needs a physical power cycle; every remaining step
+needs the device.
+
+What is ready the moment it comes back:
+
+* `tools/lane-sweep.sh` + the new `camss_lane_override` module parameter
+  `(clk<<8)|(d1<<4)|d0`, which tries every plausible CSI-2 lane permutation at
+  stream time **without** a DTB rebuild or reboot and reports the csid0/csiphy2
+  interrupt deltas and captured bytes per variant;
+* the vendor register tables (`vendor-re/vendor-register-tables.md`) and the
+  patches that make the CSID use the 175_200 map and the CSIPHY replay the DTR
+  v1.1 sequence;
+* address-conflict analysis showing only csiphy3 could grow to 0x2000, so the
+  vendor `csiphy_common_reg_2_1_1` offsets (0x1018/0x101c/0x1084) most likely do
+  not apply to SM8150 at all.
+
+Next action after recovery: run `tools/lane-sweep.sh`; if any permutation lights up
+csid0, pin that mapping in the DTB.
