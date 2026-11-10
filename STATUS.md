@@ -119,3 +119,29 @@ insmod ov8856.ko
    makes the whole LED node fail to probe.
 4. The IMX586 driver in this tree accepts only a 24 MHz xclk; the OV8856 expects
    19.2 MHz.
+
+## Final evidence (round 59)
+
+During a live stream the complete vendor PHY register set holds every value we write:
+
+```
+lane0 0x000 = 0x8e    lane1 0x400 = 0x8e
+gbl   0x1000 = 0x0e   0x1014 = 0x07   0x1018 = 0x01   0x101c = 0x7a
+```
+
+and **every status register reads zero**:
+
+```
+status 0x340 = 0x358 = 0x758 = 0xb58 = 0
+hw_info 0x1028 = 0x1058 = 0x10b0 = 0
+```
+
+A CSIPHY receiving even a clock lane reports at least one non-zero status bit, so the
+remaining gap is almost certainly on the **sensor side of the link** - the module
+reports streaming (`0x0100=0x01`, `0x4800=0x44`) but is not driving its MIPI clock.
+
+The one experiment left unfinished is the `0x4800` clock-lane variant sweep: the knob
+was added (`reg_4800` in the OV8856 driver) but the override did not take effect in
+the build used, so the values 0x44/0x24/0x04/0x64 are untested.  To redo it, write
+0x4800 **after** the mode register list is committed and **before** `0x0100 <- 0x01`,
+then re-read the PHY status registers.
