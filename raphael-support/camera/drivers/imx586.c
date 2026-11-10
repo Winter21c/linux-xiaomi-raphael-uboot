@@ -9,7 +9,7 @@
  * Modified by OCTOPUSCINEMA
  * Copyright (C) 2024 OCTOPUS CINEMA
  */
-#include <asm/unaligned.h>
+#include <linux/unaligned.h>
 #include <linux/clk.h>
 #include <linux/delay.h>
 #include <linux/gpio/consumer.h>
