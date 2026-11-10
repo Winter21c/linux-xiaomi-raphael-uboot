@@ -225,6 +225,12 @@ static int camss_phy_global = 1;
 module_param(camss_phy_global, int, 0644);
 MODULE_PARM_DESC(camss_phy_global, "program the CSIPHY global block");
 
+/* Limit which rate-table offsets are written: accessing a gated lane block raises
+ * an external abort, so keep this below the first unexpected block by default. */
+static int camss_phy_rate_limit = 0x400;
+module_param(camss_phy_rate_limit, int, 0644);
+MODULE_PARM_DESC(camss_phy_rate_limit, "skip rate-table records at or above this offset");
+
 static int camss_phy_rate = -1;	/* index into csiphy_rate_tables, -1 = skip */
 module_param(camss_phy_rate, int, 0644);
 MODULE_PARM_DESC(camss_phy_rate, "apply the vendor per-data-rate PLL table by index");
@@ -290,6 +296,8 @@ static void csiphy_program_global(struct csiphy_device *csiphy)
 		for (i = 0; i < t->count; i++) {
 			const struct csiphy_rate_rec *r = &t->recs[i];
 
+			if (r->off >= camss_phy_rate_limit)
+				continue;
 			if (r->mask) {
 				u32 cur = readl_relaxed(csiphy->base + r->off);
 

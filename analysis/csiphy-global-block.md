@@ -130,3 +130,37 @@ plus a 0x200 offset, not a flat 0..0x1000 space).
 Recommendation for whoever continues: re-verify the packing by disassembling the
 consumer of `datarate_211_*` (the loop that walks the table) before trusting the
 generated C struct.
+
+## Round 57: the oops is fixed - it was a gated lane block
+
+The `Oops 96000047` in round 55 was caused by the per-rate PLL records whose offsets
+are **0x400 and above**: those land in the *second data-lane block*, and touching a
+gated lane block raises an external abort.  Two knobs make that explicit and safe:
+
+* `camss_phy_rate_limit` (default **0x400**) - records at or above this offset are
+  skipped, so the default configuration never touches a possibly-gated block;
+* `camss_phy_lane_mask` - with mask **0x7** the second lane block becomes writable
+  and the limit can be raised to 0x800 without any fault.
+
+Verified sweeps, every run `oops=0`:
+
+```
+rate=0 (1.2 Gsps)   bytes=0 csid0=0      rate=3 (2.1 Gsps)   bytes=0 csid0=0
+rate=1 (1.5 Gsps)   bytes=0 csid0=0      rate=4 (2.35 Gsps)  bytes=0 csid0=0
+rate=2 (1.7 Gsps)   bytes=0 csid0=0      rate=5 (2.6 Gsps)   bytes=0 csid0=0
+```
+
+and lane masks 0x1 / 0x3 / 0x7 with the rate table enabled: all `oops=0`,
+`bytes=0`, `csid0=0`.
+
+So the complete vendor PHY sequence - reset, common, IRQ, per-rate PLL, lane enable -
+now runs stably on the device.  The receiver is fully configured and still delivers no
+packet to the CSID, which means the remaining difference is not in the PHY
+programming any more.  The most probable candidates left:
+
+1. the sensor's actual lane rate does not match any table (0.72 Gsps is below the
+   smallest, 1.2 Gsps) - a mode with a >=1.2 Gsps rate would test this directly;
+2. the CSID's input selection (`assign=0x21 phy=2` comes from our own DT/ops and was
+   never cross-checked against the vendor's `cam_ife_csid_hw_ver1_hw_cfg`);
+3. the third one is timing: the vendor starts the sensor *after* the PHY sequence
+   completes, while camss starts subdevs in a fixed order.
