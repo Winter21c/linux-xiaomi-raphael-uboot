@@ -1,5 +1,5 @@
 --- up/camss/camss-csid-gen2.c	2026-11-10 21:54:54.393070386 +0800
-+++ /tmp/camss-final/camss-csid-gen2.c	2026-11-10 21:42:59.437317094 +0800
++++ camss-final/camss-csid-gen2.c	2026-11-10 21:42:59.437317094 +0800
 @@ -22,7 +22,15 @@
   * alternate register layout.
   */

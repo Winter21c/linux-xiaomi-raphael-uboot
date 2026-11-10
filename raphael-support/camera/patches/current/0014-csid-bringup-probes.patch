@@ -1,5 +1,5 @@
 --- up/camss/camss-csid.c	2026-11-10 21:54:56.591134835 +0800
-+++ /tmp/camss-final/camss-csid.c	2026-11-08 17:49:38.117509577 +0800
++++ camss-final/camss-csid.c	2026-11-08 17:49:38.117509577 +0800
 @@ -15,6 +15,7 @@
  #include <linux/of.h>
  #include <linux/platform_device.h>

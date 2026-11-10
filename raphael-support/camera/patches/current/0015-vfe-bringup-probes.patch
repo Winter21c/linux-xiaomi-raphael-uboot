@@ -1,5 +1,5 @@
 --- up/camss/camss-vfe-480.c	2026-11-10 21:54:58.297117655 +0800
-+++ /tmp/camss-final/camss-vfe-480.c	2026-11-08 16:10:22.669813273 +0800
++++ camss-final/camss-vfe-480.c	2026-11-08 16:10:22.669813273 +0800
 @@ -92,8 +92,34 @@
  
  static void vfe_global_reset(struct vfe_device *vfe)

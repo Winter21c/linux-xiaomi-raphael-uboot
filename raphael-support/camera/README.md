@@ -88,3 +88,35 @@ tools/            camera_peek, lane-sweep, the mcu control tool and helpers
   block raises an external abort and takes the phone down (it happened twice,
   once from `0xac40000` and once from `cpas`/`camnoc` neighbours);
 * the camera modules need `modprobe i2c-qcom-cci` before `modprobe qcom-camss`.
+
+## Final state (round 51)
+
+The patch series is regenerated against `raphael-v7.3.0` from the current sources
+(`patches/current/0011..0015`), and the device tree currently flashed is
+`dtb/raphael-camera-final.dtb` (built from `dtb/raphael-camera-final.dts`):
+
+* camera nodes for the tele (OV8856, working up to `STREAMON`) and a probe node for
+  the wide (IMX586 at 0x1a, which never acknowledges),
+* the five motor outputs plus hall reset and the front/wide LDO enables exposed as
+  `/sys/class/leds/motor:*`,
+* display and modem re-verified after every DTB change (`drm=5`, `modem=running`).
+
+### Verified working on the device right now
+
+| peripheral | state |
+|---|---|
+| display (DRM) | 5 connectors, panel `samsung,ams639rq08` |
+| modem / WiFi / BT | `modem=running` |
+| audio, touch, NFC, haptics | untouched, working |
+| CCI + OV8856 + VFE0 | sensor streams, CSID configured, VFE alive |
+| front pop-up motor pins | driven and verified at the pin level |
+| **camera frames** | **none - CSI-2 never reaches the CSID** |
+
+### The one remaining blocker, stated plainly
+
+The CSIPHY register file accepts the vendor D-PHY v1.1 sequence but the CSID
+receives no packets and reports no errors, and the CSID test-pattern generator does
+not produce an interrupt either.  Since upstream has no SM8150 camss support, the
+missing piece is the vendor driver's *dynamic* PHY enable, which is only available
+as compiled code in `vendor_dlkm/camera.ko` (kept its symbols; the relevant
+functions are listed in `analysis/camera-vfe-reset-timeout.md`).
