@@ -1,0 +1,89 @@
+# raphael mainline camera bring-up - final status
+
+Date of last measurement: round 52.
+Branch: `raphael-peripherals` (`Winter21c/linux-xiaomi-raphael-uboot`).
+Base kernel: `GengWei1997/linux` `raphael-v7.3.0`.
+
+## One-line summary
+
+The camera stack is ported to SM8150 and everything up to the CSI-2 receiver is
+verified working on the device, but **no camera has ever produced a frame** because
+the SM8150 CSIPHY never delivers a packet to the CSID, and that last step needs a
+vendor-only initialisation sequence.
+
+## Verified working (measured on the device)
+
+| item | evidence |
+|---|---|
+| display / DRM | `drm=5`, panel `samsung,ams639rq08`, desktop visible |
+| modem, WiFi, Bluetooth | `modem=running`, bluetooth stack loaded |
+| audio | `card0` with working PCM/control devices |
+| touch, NFC, haptics | goodix_gtx8, nxp_nci_i2c, pm8150b_haptics all loaded |
+| qcom-camss on SM8150 | `/dev/media0`, 16 video nodes, 23 subdevs |
+| i2c-qcom-cci | both CCI0 masters register as `Qualcomm-CCI` |
+| OV8856 (tele) | binds at `3-0036`, chip id read, `s_stream(1)` returns 0 |
+| sensor really streaming | reads back `0x0100=0x01`, `0x4800=0x44` |
+| CSID0 | configured (`rx_cfg0=0x00032103`), reset completes, no errors reported |
+| VFE0 | `hw_version=0x10020000`, writes stick, SPI 497 fires |
+| CSIPHY2 | vendor 103-record D-PHY v1.1 sequence applied and holds |
+| front pop-up motor pins | 8 gpio exposed as `/sys/class/leds/motor:*`, driven and confirmed at pin level |
+
+## Not working
+
+* **CSI-2 data**: the CSID receives zero packets and reports zero errors, i.e. the
+  PHY output is never enabled.  No frame has been captured from any of the four
+  cameras.
+* **front camera motor**: the drive sequence is correct at the pin level
+  (`en/sleep/dir/m0/m1` follow writes, nFAULT stays high) but the hall input never
+  changes, so physical movement is unconfirmed.
+* **IMX586 / S5K3L6 / S5K3T2**: drivers exist in the tree, the IMX586 node is in the
+  DT, but the chip never acknowledges at 0x10/0x1a/0x20/0x2d.
+
+## Why the CSIPHY is the blocker, and why it is hard
+
+Upstream `camss` has **no SM8150 support at all** (`grep -c sm8150 camss.c` = 0), so
+there is no reference configuration.  The only source of truth is the vendor
+`camera.ko` extracted from a HyperOS `vendor_dlkm` image, from which the register
+tables were recovered:
+
+* `cam_ife_csid_175_200_cmn_reg_info` (CSID map, now applied),
+* `csiphy_2ph_v2_1_1_reg` (103-record D-PHY v1.1 init, now applied),
+* `csiphy_common_reg_2_1_1` (offsets 0x1018/0x101c/0x1084 - **unreachable**: the DT
+  gives every CSIPHY a single 0x1000 window and the vendor DT confirms it).
+
+What is still missing is the vendor's *dynamically programmed* PHY enable (lane
+power / PLL).  That code exists only as ARM64 instructions in `camera.ko`; the
+relevant symbols are recorded in `analysis/camera-vfe-reset-timeout.md`
+(`cam_csiphy_config_dev`, `cam_csiphy_update_lane_selection`,
+`cam_csiphy_program_common_registers`, `cam_ife_csid_hw_ver1_hw_cfg`,
+`cam_ife_csid_hw_ver2_init`).
+
+## Everything that was eliminated (each with measurements)
+
+sensor not streaming / wrong rails / wrong MCLK; CSID and CSIPHY register maps;
+CSID held in reset; CSID output-path mux (SM8550+ only); 12 CSI-2 lane permutations;
+8 settle values; 3 CSID reset values; CAMCC block resets; all camera clocks;
+CSID test-pattern generator; 3 sensor modes; 4 IMX586 I2C addresses.
+
+## How to reproduce
+
+```
+git clone -b raphael-peripherals https://github.com/Winter21c/linux-xiaomi-raphael-uboot
+# apply raphael-support/camera/patches/current/0011..0015 to a raphael-v7.3.0 tree
+# flash raphael-support/camera/dtb/raphael-camera-final.dtb to
+#   /boot/dtbs/qcom/sm8150-xiaomi-raphael.dtb
+modprobe i2c-qcom-cci
+modprobe qcom-camss
+insmod ov8856.ko
+```
+
+## Safety rules learned the hard way
+
+1. Never rebuild the DTB from the kernel sources - the tree has the wrong panel
+   compatible and the display disappears.  Patch the shipped blob.
+2. Never ioremap a camera block unless it is powered: reading a gated Qualcomm block
+   raises an external abort and takes the phone down (happened twice).
+3. At most one consumer per GPIO - a regulator and a gpio-leds entry on the same pin
+   makes the whole LED node fail to probe.
+4. The IMX586 driver in this tree accepts only a 24 MHz xclk; the OV8856 expects
+   19.2 MHz.
