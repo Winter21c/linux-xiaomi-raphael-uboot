@@ -210,3 +210,41 @@ could be extracted:
 Evidence for (1) is the strongest: three hw_info offsets remain unused, and the vendor
 struct also carries `status_regs_2_1_1` at 0x340/0xc0/0x358/0x758/0xb58 - registers
 whose values we have never read back and compared against a working stream.
+
+## Round 59: every PHY status register reads zero during a live stream
+
+Read the vendor `hw_info` offsets and the whole `status_regs_2_1_1` set **while
+streaming**:
+
+```
+lane 0x000 = 0x8e    lane 0x400 = 0x8e        (both lane blocks configured)
+gbl  0x1000 = 0x0e   0x1014 = 0x07   0x1018 = 0x01   0x101c = 0x7a
+hw_info 0x1028 = 0   0x1058 = 0   0x10b0 = 0
+status  0x340 = 0    0x358 = 0    0x758 = 0    0xb58 = 0
+```
+
+Everything we write holds, and **every status register is zero**.  A PHY that is
+receiving even a clock lane would report at least one non-zero status bit, so the
+most probable remaining explanation is that **the sensor is not driving its MIPI
+clock lane at all**, despite reporting `0x0100=0x01` (streaming) and `0x4800=0x44`.
+
+Attempted confirmation: added a `reg_4800` knob to the OV8856 driver and tried
+0x44 / 0x24 / 0x04 / 0x64 (clock-lane continuous vs gated variants) and re-read the
+status registers each time - all still zero and still zero bytes.  The override did
+not take effect in that build (no `override 0x4800` message), so this particular
+experiment is inconclusive and should be redone by placing the write **after** the
+mode registers are actually committed and before `0x0100 <- 0x01`.
+
+### Final position of this work
+
+| layer | state |
+|---|---|
+| DT, clocks, GDSC, CCI, sensor driver | working, verified |
+| CSID receiver | configured and verified live (rx_cfg0=0x32103, no errors) |
+| CSIPHY | complete vendor register set identified and programmed (reset, common, IRQ, PLL, lane enable) - all writes verified |
+| **MIPI link** | **no traffic, and every PHY status bit reads 0** |
+| VFE | fully functional |
+
+The evidence now points at the **sensor-to-PHY link** rather than at any register we
+control: the PHY is programmed exactly as the vendor binary describes, the receiver is
+verified good, and nothing at all arrives.
