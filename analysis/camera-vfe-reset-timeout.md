@@ -742,3 +742,42 @@ is never enabled, not of a marginal link.  That enable sequence exists only insi
 the vendor `camera.ko`, and reconstructing it requires disassembling
 `cam_csiphy_config_dev` / `cam_csiphy_update_lane_selection` completely, including
 the runtime-computed values that are not in any of the static tables.
+
+## Round 53: two self-inflicted configuration errors found and fixed
+
+While re-running the full pipeline after the device-tree changes, two mistakes in my
+own setup were found - both would have invalidated recent negative results:
+
+1. **The OV8856 MCLK had been left at 24 MHz.**  A bulk `sed` intended for the
+   IMX586 node also hit the OV8856 node, so the tele sensor was clocked at 24 MHz
+   while its driver expects 19.2 MHz (`external clock rate 24000000 is unsupported`
+   in dmesg).  Restored to 19.2 MHz, which is also what the vendor DT uses for
+   `CAM_CC_MCLK1_CLK`.
+2. **The CSIPHY subdev format was never set** by my simplified scripts, so
+   `media_pipeline_start()` returned `-EPIPE` and nothing streamed at all.  The
+   working sequence must set the format on **sensor, csiphy, csid and vfe** pads.
+
+With both fixed the pipeline starts cleanly again:
+
+```
+csiphy pre  link=360000000 settle=36 mask=0x06 num_data=2 clk_pos=0 data_pos=1,2
+csiphy post pwr=0x0000000d rst=0x00000000 ln0cfg2=0x0000000c
+ov8856 s_stream(1) called
+stream state: 0x0100=0x01 0x4800=0x44 ...
+```
+
+and the outcome is the same as before the regressions:
+
+```
+bytes=0    msm_csid0=0    csid0 rx_cfg0: wrote=0x00200211 readback=0x00000000
+```
+
+So the conclusions from rounds <= 50 stand - the CSI-2 receiver still gets nothing -
+but the reproduction procedure is now correct and documented:
+
+```
+modprobe i2c-qcom-cci; modprobe qcom-camss; insmod ov8856.ko
+# set the same 1640x1232 / 0x300a format on: sensor, csiphy2, csid0, vfe0_rdi0
+# enable csiphy2:1 -> csid0:0 and csid0:1 -> vfe0_rdi0:0
+# set /dev/video2 to 1640x1232 pgAA, then STREAMON
+```
