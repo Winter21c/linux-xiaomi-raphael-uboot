@@ -1,0 +1,80 @@
+--- up/camss/camss-csid-gen2.c	2026-11-10 21:54:54.393070386 +0800
++++ /tmp/camss-final/camss-csid-gen2.c	2026-11-10 21:42:59.437317094 +0800
+@@ -22,7 +22,15 @@
+  * alternate register layout.
+  */
+ 
+-#define CSID_RST_STROBES	0x10
++/* SM8150 CSID 1.7.5 register map (from the vendor camera.ko tables
++ * cam_ife_csid_175_200_cmn_reg_info): cgc_ovd 0x04, core_cfg 0x08,
++ * core_ctrl 0x0c, rst_cmd 0x10, rst_strobes 0x14.  The upstream gen2 map
++ * has no cgc_ovd/core_cfg/core_ctrl and treats 0x10 as rst_strobes. */
++#define CSID_CGC_OVD		0x04
++#define CSID_CORE_CFG		0x08
++#define CSID_CORE_CTRL		0x0c
++#define CSID_RST_CMD		0x10
++#define CSID_RST_STROBES	0x14
+ #define		RST_STROBES	0
+ 
+ #define CSID_CSI2_RX_IRQ_STATUS	0x20
+@@ -180,10 +188,19 @@
+ 	if (!lane_cnt)
+ 		lane_cnt = 4;
+ 
++	/* vendor: CORE_CFG enable, then CORE_CTRL = (lanes-1) | (assign << 4) */
++	writel_relaxed(0x1, csid->base + CSID_CORE_CFG);
++	writel_relaxed((lane_cnt - 1) | (phy->lane_assign << 4),
++		       csid->base + CSID_CORE_CTRL);
++
+ 	val = (lane_cnt - 1) << CSI2_RX_CFG0_NUM_ACTIVE_LANES;
+ 	val |= phy->lane_assign << CSI2_RX_CFG0_DL0_INPUT_SEL;
+ 	val |= phy->csiphy_id << CSI2_RX_CFG0_PHY_NUM_SEL;
+ 	writel_relaxed(val, csid->base + CSID_CSI2_RX_CFG0);
++	dev_info(csid->camss->dev,
++		 "csid%d rx_cfg0: wrote=0x%08x readback=0x%08x (lane_cnt=%u assign=0x%x phy=%u)\n",
++		 csid->id, val, readl_relaxed(csid->base + CSID_CSI2_RX_CFG0),
++		 lane_cnt, phy->lane_assign, phy->csiphy_id);
+ 
+ 	val = 1 << CSI2_RX_CFG1_PACKET_ECC_CORRECTION_EN;
+ 	if (vc > 3)
+@@ -384,6 +401,11 @@
+ 	return IRQ_HANDLED;
+ }
+ 
++/* Bring-up knob: value written to RST_CMD (-1 = do not trigger a reset at all). */
++static int camss_csid_rst_cmd = 0x7fff;
++module_param(camss_csid_rst_cmd, int, 0644);
++MODULE_PARM_DESC(camss_csid_rst_cmd, "CSID RST_CMD value, -1 skips the reset");
++
+ /*
+  * csid_reset - Trigger reset on CSID module and wait to complete
+  * @csid: CSID device
+@@ -402,16 +424,23 @@
+ 	writel_relaxed(1, csid->base + CSID_TOP_IRQ_MASK);
+ 	writel_relaxed(1, csid->base + CSID_IRQ_CMD);
+ 
+-	/* preserve registers */
++	/* disable internal clock gating before touching anything else */
++	writel_relaxed(0x1, csid->base + CSID_CGC_OVD);
++
++	/* reset strobes (vendor writes 0x1e << RST_STROBES) then trigger */
+ 	val = 0x1e << RST_STROBES;
+ 	writel_relaxed(val, csid->base + CSID_RST_STROBES);
++	if (camss_csid_rst_cmd >= 0)
++		writel_relaxed(camss_csid_rst_cmd, csid->base + CSID_RST_CMD);
++
++	if (camss_csid_rst_cmd < 0)
++		return 0;
+ 
+ 	time = wait_for_completion_timeout(&csid->reset_complete,
+ 					   msecs_to_jiffies(CSID_RESET_TIMEOUT_MS));
+-	if (!time) {
+-		dev_err(csid->camss->dev, "CSID reset timeout\n");
+-		return -EIO;
+-	}
++	if (!time)
++		dev_warn(csid->camss->dev,
++			 "CSID reset timeout (continuing for bring-up)\n");
+ 
+ 	return 0;
+ }

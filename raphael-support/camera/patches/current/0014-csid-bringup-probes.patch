@@ -1,0 +1,63 @@
+--- up/camss/camss-csid.c	2026-11-10 21:54:56.591134835 +0800
++++ /tmp/camss-final/camss-csid.c	2026-11-08 17:49:38.117509577 +0800
+@@ -15,6 +15,7 @@
+ #include <linux/of.h>
+ #include <linux/platform_device.h>
+ #include <linux/pm_runtime.h>
++#include <linux/delay.h>
+ #include <linux/regulator/consumer.h>
+ #include <media/media-entity.h>
+ #include <media/mipi-csi2.h>
+@@ -612,6 +613,8 @@
+ 	u32 hw_step;
+ 
+ 	hw_version = readl_relaxed(csid->base + CSID_HW_VERSION);
++	dev_info(csid->camss->dev, "csid%d hw_version reg(0x%x)=0x%08x\n",
++		 csid->id, CSID_HW_VERSION, hw_version);
+ 	hw_gen = (hw_version >> HW_VERSION_GENERATION) & 0xF;
+ 	hw_rev = (hw_version >> HW_VERSION_REVISION) & 0xFFF;
+ 	hw_step = (hw_version >> HW_VERSION_STEPPING) & 0xFFFF;
+@@ -777,9 +780,31 @@
+ 			return -ENOLINK;
+ 	}
+ 
+-	if (csid->phy.need_vc_update) {
+-		csid->res->hw_ops->configure_stream(csid, enable);
+-		csid->phy.need_vc_update = false;
++	/*
++	 * Bring-up: need_vc_update is only set when a set_format actually changes
++	 * something, so a pipeline configured in "try then set" order can reach
++	 * stream-on with the CSID never programmed (CSI2_RX_CFG0 reads 0).  Update
++	 * unconditionally; the write is idempotent.
++	 */
++	csid->res->hw_ops->configure_stream(csid, enable);
++	csid->phy.need_vc_update = false;
++
++	if (enable) {
++		dev_info(csid->camss->dev,
++			 "csid%d state: en_vc=0x%x need_vc=%d lane_cnt=%u lane_assign=0x%x csiphy_id=%u phy_ok=%d\n",
++			 csid->id, csid->phy.en_vc, csid->phy.need_vc_update,
++			 csid->phy.lane_cnt, csid->phy.lane_assign,
++			 csid->phy.csiphy_id, csid->phy.csiphy_id != 0);
++		/* bring-up: does the CSID see a CSI-2 clock at all? 0x100 is
++		 * CSID_CSI2_RX_CFG0, 0x20 the RX irq status, 0x70 the top status */
++		msleep(50);
++		dev_info(csid->camss->dev,
++			 "csid%d rx: cfg0=0x%08x rxirq=0x%08x top=0x%08x phycfg=0x%08x\n",
++			 csid->id,
++			 readl_relaxed(csid->base + 0x100),
++			 readl_relaxed(csid->base + 0x20),
++			 readl_relaxed(csid->base + 0x70),
++			 readl_relaxed(csid->base + 0x30));
+ 	}
+ 
+ 	return 0;
+@@ -1161,7 +1186,7 @@
+ 	for (i = 0; i < csid->nclocks; i++) {
+ 		struct camss_clock *clock = &csid->clock[i];
+ 
+-		clock->clk = devm_clk_get(dev, res->clock[i]);
++		clock->clk = camss_clk_get(dev, res->clock[i]);
+ 		if (IS_ERR(clock->clk))
+ 			return PTR_ERR(clock->clk);
+ 

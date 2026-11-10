@@ -1,0 +1,467 @@
+--- up/camss/camss.c	2026-11-10 21:54:52.544047868 +0800
++++ /tmp/camss-final/camss.c	2026-11-08 19:54:16.343257265 +0800
+@@ -4564,11 +4564,15 @@
+ 	int i;
+ 
+ 	for (i = 0; i < nclocks; i++) {
++		/* Bring-up aid: the last line printed identifies a wedged clock. */
++		dev_info(dev, "clk[%d/%d] %s: prepare_enable\n", i + 1, nclocks,
++			 clock[i].name ? clock[i].name : "?");
+ 		ret = clk_prepare_enable(clock[i].clk);
+ 		if (ret) {
+ 			dev_err(dev, "clock enable failed: %d\n", ret);
+ 			goto error;
+ 		}
++		dev_info(dev, "clk[%d/%d] enabled\n", i + 1, nclocks);
+ 	}
+ 
+ 	return 0;
+@@ -4803,6 +4807,14 @@
+ 						      typeof(*csd));
+ 		if (IS_ERR(csd)) {
+ 			ret = PTR_ERR(csd);
++			/* raphael bring-up: a port without a remote endpoint
++			 * (e.g. no sensor described yet) must not fail the
++			 * whole CAMSS probe. */
++			if (ret == -ENOTCONN) {
++				dev_info(dev, "raphael-camss: port without remote endpoint, skipped\n");
++				ret = 0;
++				continue;
++			}
+ 			goto err_cleanup;
+ 		}
+ 
+@@ -5050,6 +5062,79 @@
+  *
+  * Return 0 on success or a negative error code on failure
+  */
++
++/*
++ * The CAMCC clock controller node of the sm8150 device tree carries no phandle
++ * (nothing references it) and adding one to a live tree is not safe, so the
++ * camera clocks are resolved by node path when the DT has no clock specifier.
++ */
++struct camss_clk_alias {
++	const char *name;
++	u32 id;
++	bool from_gcc;
++};
++
++static const struct camss_clk_alias camss_clk_aliases[] = {
++	{ "csiphy0", 34, false }, { "csiphy0_timer", 26, false },
++	{ "csiphy1", 35, false }, { "csiphy1_timer", 28, false },
++	{ "csiphy2", 36, false }, { "csiphy2_timer", 30, false },
++	{ "csiphy3", 37, false }, { "csiphy3_timer", 32, false },
++	{ "ife0", 47, false }, { "ife0_axi", 46, false },
++	{ "ife0_csid", 50, false }, { "ife0_cphy_rx", 49, false },
++	{ "ife1", 54, false }, { "ife1_axi", 53, false },
++	{ "ife1_csid", 57, false }, { "ife1_cphy_rx", 56, false },
++	{ "ife_lite", 60, false }, { "ife_lite_axi", 60, false },
++	{ "ife_lite_csid", 63, false }, { "ife_lite_cphy_rx", 62, false },
++	{ "camnoc_axi", 16, false }, { "camnoc_axi_src", 17, false },
++	{ "core_ahb", 23, false }, { "cpas_ahb", 24, false },
++	{ "slow_ahb_src", 91, false },
++	{ "cci0", 19, false }, { "cci1", 21, false },
++	{ "cam_ahb_clk", 8, true }, { "cam_hf_axi", 9, true },
++	{ "cam_sf_axi", 10, true },
++};
++
++struct clk *camss_clk_get(struct device *dev, const char *name)
++{
++	struct of_phandle_args spec;
++	struct device_node *np;
++	struct clk *clk;
++	size_t i;
++
++	clk = devm_clk_get(dev, name);
++	if (!IS_ERR(clk))
++		return clk;
++
++	for (i = 0; i < ARRAY_SIZE(camss_clk_aliases); i++)
++		if (!strcmp(camss_clk_aliases[i].name, name))
++			break;
++	if (i == ARRAY_SIZE(camss_clk_aliases))
++		return clk;
++
++	np = of_find_node_by_path(camss_clk_aliases[i].from_gcc ?
++				  "/soc@0/clock-controller@100000" :
++				  "/soc@0/clock-controller@ad00000");
++	if (!np)
++		return clk;
++
++	memset(&spec, 0, sizeof(spec));
++	spec.np = np;
++	spec.args_count = 1;
++	spec.args[0] = camss_clk_aliases[i].id;
++
++	clk = of_clk_get_from_provider(&spec);
++	of_node_put(np);
++	if (IS_ERR(clk))
++		return clk;
++
++	/*
++	 * Do not register a devres clk_put(): several resource entries map to the
++	 * same CAMCC clock (ife_lite and ife_lite_axi), so devres cleanup would
++	 * clk_put() the same reference twice and crash the kernel after a failed
++	 * probe.  The reference is intentionally kept for the module lifetime.
++	 */
++	return clk;
++}
++
+ static int camss_register_entities(struct camss *camss)
+ {
+ 	int i;
+@@ -5241,8 +5326,12 @@
+ 						      "power-domains",
+ 						      "#power-domain-cells");
+ 	if (camss->genpd_num < 0) {
+-		dev_err(dev, "Power domains are not defined for camss\n");
+-		return camss->genpd_num;
++		/* The CAMCC node of sm8150 has no phandle, so the board DT cannot
++		 * describe the CAMSS power domains.  Keep the GDSC state left by
++		 * the bootloader and continue without genpd. */
++		dev_warn(dev, "no power domains defined, continuing without genpd\n");
++		camss->genpd_num = 0;
++		return 0;
+ 	}
+ 
+ 	/*
+@@ -5271,6 +5360,8 @@
+ 	 * It is possible we are running a new kernel with an old dtb so
+ 	 * fallback to indexes even if a pd_name is defined but not found.
+ 	 */
++	dev_info(dev, "attaching CAMSS power domain \"%s\"\n",
++		 camss->res->pd_name);
+ 	if (camss->res->pd_name) {
+ 		camss->genpd = dev_pm_domain_attach_by_name(camss->dev,
+ 							    camss->res->pd_name);
+@@ -5285,13 +5376,25 @@
+ 		 */
+ 		camss->genpd = dev_pm_domain_attach_by_id(camss->dev,
+ 							  camss->genpd_num - 1);
+-		if (IS_ERR(camss->genpd))
+-			return PTR_ERR(camss->genpd);
++		if (IS_ERR(camss->genpd)) {
++			/* raphael bring-up: the CAMCC GDSC provider is not
++			 * attachable yet (-ENOTCONN).  Keep the state the
++			 * bootloader left and probe the subdevices anyway. */
++			dev_warn(dev, "power domain %d unavailable (%ld), continuing without genpd\n",
++				 camss->genpd_num - 1, PTR_ERR(camss->genpd));
++			camss->genpd = NULL;
++			camss->genpd_num = 0;
++			return 0;
++		}
+ 	}
+ 
+-	if (!camss->genpd)
+-		return -ENODEV;
++	if (!camss->genpd) {
++		camss->genpd_num = 0;
++		return 0;
++	}
+ 
++	dev_info(dev, "raphael-camss: attaching top GDSC by id %d\n",
++		 camss->genpd_num - 1);
+ 	camss->genpd_link = device_link_add(camss->dev, camss->genpd,
+ 					    DL_FLAG_STATELESS | DL_FLAG_PM_RUNTIME |
+ 					    DL_FLAG_RPM_ACTIVE);
+@@ -5399,21 +5502,35 @@
+ 	if (!camss->vfe)
+ 		return -ENOMEM;
+ 
++	dev_info(dev, "raphael-camss: probe begin (res ver %d)\n",
++		 camss->res->version);
++
+ 	ret = camss_icc_get(camss);
++	dev_info(dev, "raphael-camss: icc_get -> %d\n", ret);
+ 	if (ret < 0)
+ 		return ret;
+ 
+ 	ret = camss_configure_pd(camss);
++	dev_info(dev, "raphael-camss: configure_pd -> %d (genpd_num %d)\n",
++		 ret, camss->genpd_num);
+ 	if (ret < 0) {
+ 		dev_err(dev, "Failed to configure power domains: %d\n", ret);
+ 		return ret;
+ 	}
+ 
+ 	ret = camss_init_subdevices(camss);
++	dev_info(dev, "raphael-camss: init_subdevices -> %d\n", ret);
+ 	if (ret < 0)
+ 		goto err_genpd_cleanup;
+ 
+-	ret = dma_set_mask_and_coherent(dev, 0xffffffff);
++	/*
++	 * The SM8150 camera NoC addresses memory with 64-bit bus addresses; a
++	 * 32-bit mask forces every multi-megabyte frame buffer through the
++	 * swiotlb bounce buffer, which then fails with
++	 * "swiotlb buffer is full (sz: 2097152 bytes)".
++	 */
++	ret = dma_set_mask_and_coherent(dev, DMA_BIT_MASK(64));
++	dev_info(dev, "raphael-camss: dma_set_mask(64) -> %d\n", ret);
+ 	if (ret)
+ 		goto err_genpd_cleanup;
+ 
+@@ -5425,6 +5542,7 @@
+ 
+ 	camss->v4l2_dev.mdev = &camss->media_dev;
+ 	ret = v4l2_device_register(camss->dev, &camss->v4l2_dev);
++	dev_info(dev, "raphael-camss: v4l2_device_register -> %d\n", ret);
+ 	if (ret < 0) {
+ 		dev_err(dev, "Failed to register V4L2 device: %d\n", ret);
+ 		goto err_media_device_cleanup;
+@@ -5435,6 +5553,7 @@
+ 	pm_runtime_enable(dev);
+ 
+ 	ret = camss_parse_ports(camss);
++	dev_info(dev, "raphael-camss: parse_ports -> %d\n", ret);
+ 	if (ret < 0)
+ 		goto err_v4l2_device_unregister;
+ 
+@@ -5668,6 +5787,238 @@
+ 	.vfe_num = ARRAY_SIZE(vfe_res_8250),
+ };
+ 
++static const struct camss_subdev_resources csiphy_res_sm8150[] = {
++	/* CSIPHY0 */
++	{
++		.clock = { "csiphy0", "csiphy0_timer", "cphy_rx" },
++		.clock_rate = { { 400000000 }, { 300000000 } },
++		.regulators = {
++				{ .supply = "vdda-phy", .init_load_uA = 17500 },
++				{ .supply = "vdda-pll", .init_load_uA = 10000 },
++			},
++			.reg = { "csiphy0" },
++		.interrupt = { "csiphy0" },
++		.csiphy = {
++			.id = 0,
++			.hw_ops = &csiphy_ops_2ph_1_0,
++			.formats = &csiphy_formats_sdm845
++		}
++	},
++	/* CSIPHY1 */
++	{
++		.clock = { "csiphy1", "csiphy1_timer", "cphy_rx" },
++		.clock_rate = { { 400000000 }, { 300000000 } },
++		.regulators = {
++				{ .supply = "vdda-phy", .init_load_uA = 17500 },
++				{ .supply = "vdda-pll", .init_load_uA = 10000 },
++			},
++			.reg = { "csiphy1" },
++		.interrupt = { "csiphy1" },
++		.csiphy = {
++			.id = 1,
++			.hw_ops = &csiphy_ops_2ph_1_0,
++			.formats = &csiphy_formats_sdm845
++		}
++	},
++	/* CSIPHY2 */
++	{
++		.clock = { "csiphy2", "csiphy2_timer", "cphy_rx" },
++		.clock_rate = { { 400000000 }, { 300000000 } },
++		.regulators = {
++				{ .supply = "vdda-phy", .init_load_uA = 17500 },
++				{ .supply = "vdda-pll", .init_load_uA = 10000 },
++			},
++			.reg = { "csiphy2" },
++		.interrupt = { "csiphy2" },
++		.csiphy = {
++			.id = 2,
++			.hw_ops = &csiphy_ops_2ph_1_0,
++			.formats = &csiphy_formats_sdm845
++		}
++	},
++	/* CSIPHY3 */
++	{
++		.clock = { "csiphy3", "csiphy3_timer", "cphy_rx" },
++		.clock_rate = { { 400000000 }, { 300000000 } },
++		.regulators = {
++				{ .supply = "vdda-phy", .init_load_uA = 17500 },
++				{ .supply = "vdda-pll", .init_load_uA = 10000 },
++			},
++			.reg = { "csiphy3" },
++		.interrupt = { "csiphy3" },
++		.csiphy = {
++			.id = 3,
++			.hw_ops = &csiphy_ops_2ph_1_0,
++			.formats = &csiphy_formats_sdm845
++		}
++	}
++};
++
++static const struct camss_subdev_resources csid_res_sm8150[] = {
++	/* CSID0 (VFE0) */
++	{
++		.clock = { "ife0_csid", "ife0_cphy_rx", "ife0" },
++		.clock_rate = { { 400000000 }, { 400000000 },
++				{ 350000000, 475000000, 576000000, 720000000 } },
++		.reg = { "csid0" },
++		.interrupt = { "csid0" },
++		.csid = {
++			.hw_ops = &csid_ops_gen2,
++			.parent_dev_ops = &vfe_parent_dev_ops,
++			.formats = &csid_formats_gen2
++		}
++	},
++	/* CSID1 (VFE1) */
++	{
++		.clock = { "ife1_csid", "ife1_cphy_rx", "ife1" },
++		.clock_rate = { { 400000000 }, { 400000000 },
++				{ 350000000, 475000000, 576000000, 720000000 } },
++		.reg = { "csid1" },
++		.interrupt = { "csid1" },
++		.csid = {
++			.hw_ops = &csid_ops_gen2,
++			.parent_dev_ops = &vfe_parent_dev_ops,
++			.formats = &csid_formats_gen2
++		}
++	},
++	/* CSID2 (VFE-lite0) */
++	{
++		.clock = { "ife_lite_csid", "ife_lite_cphy_rx", "ife_lite" },
++		.clock_rate = { { 400000000 }, { 400000000 }, { 400000000, 480000000 } },
++		.reg = { "csid2" },
++		.interrupt = { "csid2" },
++		.csid = {
++			.is_lite = true,
++			.hw_ops = &csid_ops_gen2,
++			.parent_dev_ops = &vfe_parent_dev_ops,
++			.formats = &csid_formats_gen2
++		}
++	},
++	/* CSID3 (VFE-lite1) */
++	{
++		.clock = { "ife_lite_csid", "ife_lite_cphy_rx", "ife_lite" },
++		.clock_rate = { { 400000000 }, { 400000000 }, { 400000000, 480000000 } },
++		.reg = { "csid3" },
++		.interrupt = { "csid3" },
++		.csid = {
++			.is_lite = true,
++			.hw_ops = &csid_ops_gen2,
++			.parent_dev_ops = &vfe_parent_dev_ops,
++			.formats = &csid_formats_gen2
++		}
++	}
++};
++
++static const struct camss_subdev_resources vfe_res_sm8150[] = {
++	/* VFE0 */
++	{
++		.clock = { "camnoc_axi_src", "slow_ahb_src", "cpas_ahb",
++			   "camnoc_axi", "core_ahb", "ife0", "ife0_axi",
++			   "cam_hf_axi" },
++		.clock_rate = { { 19200000, 300000000, 400000000, 480000000 },
++				{ 19200000, 80000000 },
++				{ 19200000 },
++				{ 0 },
++				{ 19200000, 80000000 },
++				{ 350000000, 475000000, 576000000, 720000000 },
++				{ 0 },
++				{ 0 } },
++		.reg = { "vfe0" },
++		.interrupt = { "vfe0" },
++		.vfe = {
++			.line_num = 3,
++			.has_pd = true,
++			.pd_name = "ife0",
++			.hw_ops = &vfe_ops_170,
++			.formats_rdi = &vfe_formats_rdi_845,
++			.formats_pix = &vfe_formats_pix_845
++		}
++	},
++	/* VFE1 */
++	{
++		.clock = { "camnoc_axi_src", "slow_ahb_src", "cpas_ahb",
++			   "camnoc_axi", "core_ahb", "ife1", "ife1_axi",
++			   "cam_hf_axi" },
++		.clock_rate = { { 19200000, 300000000, 400000000, 480000000 },
++				{ 19200000, 80000000 },
++				{ 19200000 },
++				{ 0 },
++				{ 19200000, 80000000 },
++				{ 350000000, 475000000, 576000000, 720000000 },
++				{ 0 },
++				{ 0 } },
++		.reg = { "vfe1" },
++		.interrupt = { "vfe1" },
++		.vfe = {
++			.line_num = 3,
++			.has_pd = true,
++			.pd_name = "ife1",
++			.hw_ops = &vfe_ops_170,
++			.formats_rdi = &vfe_formats_rdi_845,
++			.formats_pix = &vfe_formats_pix_845
++		}
++	},
++	/* VFE-lite0 */
++	{
++		.clock = { "camnoc_axi_src", "slow_ahb_src", "cpas_ahb",
++			   "camnoc_axi", "core_ahb", "ife_lite", "ife_lite_axi",
++			   "cam_hf_axi" },
++		.clock_rate = { { 19200000, 300000000, 400000000, 480000000 },
++				{ 19200000, 80000000 },
++				{ 19200000 },
++				{ 0 },
++				{ 19200000, 80000000 },
++				{ 400000000, 480000000 },
++				{ 0 },
++				{ 0 } },
++		.reg = { "vfe_lite0" },
++		.interrupt = { "vfe_lite0" },
++		.vfe = {
++			.is_lite = true,
++			.line_num = 4,
++			.hw_ops = &vfe_ops_170,
++			.formats_rdi = &vfe_formats_rdi_845,
++			.formats_pix = &vfe_formats_pix_845
++		}
++	},
++	/* VFE-lite1 */
++	{
++		.clock = { "camnoc_axi_src", "slow_ahb_src", "cpas_ahb",
++			   "camnoc_axi", "core_ahb", "ife_lite", "ife_lite_axi",
++			   "cam_hf_axi" },
++		.clock_rate = { { 19200000, 300000000, 400000000, 480000000 },
++				{ 19200000, 80000000 },
++				{ 19200000 },
++				{ 0 },
++				{ 19200000, 80000000 },
++				{ 400000000, 480000000 },
++				{ 0 },
++				{ 0 } },
++		.reg = { "vfe_lite1" },
++		.interrupt = { "vfe_lite1" },
++		.vfe = {
++			.is_lite = true,
++			.line_num = 4,
++			.hw_ops = &vfe_ops_170,
++			.formats_rdi = &vfe_formats_rdi_845,
++			.formats_pix = &vfe_formats_pix_845
++		}
++	}
++};
++
++static const struct camss_resources sm8150_resources = {
++	.version = CAMSS_8250,
++	.pd_name = NULL,
++	.csiphy_res = csiphy_res_sm8150,
++	.csid_res = csid_res_sm8150,
++	.vfe_res = vfe_res_sm8150,
++	.icc_res = NULL,
++	.icc_path_num = 0,
++	.csiphy_num = ARRAY_SIZE(csiphy_res_sm8150),
++	.csid_num = ARRAY_SIZE(csid_res_sm8150),
++	.vfe_num = ARRAY_SIZE(vfe_res_sm8150),
++};
++
+ static const struct camss_resources sc8280xp_resources = {
+ 	.version = CAMSS_8280XP,
+ 	.pd_name = "top",
+@@ -5754,6 +6105,7 @@
+ 	{ .compatible = "qcom,sdm845-camss", .data = &sdm845_resources },
+ 	{ .compatible = "qcom,sm6150-camss", .data = &sm6150_resources },
+ 	{ .compatible = "qcom,sm6350-camss", .data = &sm6350_resources },
++	{ .compatible = "qcom,sm8150-camss", .data = &sm8150_resources },
+ 	{ .compatible = "qcom,sm8250-camss", .data = &sm8250_resources },
+ 	{ .compatible = "qcom,sm8550-camss", .data = &sm8550_resources },
+ 	{ .compatible = "qcom,sm8650-camss", .data = &sm8650_resources },

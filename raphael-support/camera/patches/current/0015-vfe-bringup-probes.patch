@@ -1,0 +1,58 @@
+--- up/camss/camss-vfe-480.c	2026-11-10 21:54:58.297117655 +0800
++++ /tmp/camss-final/camss-vfe-480.c	2026-11-08 16:10:22.669813273 +0800
+@@ -92,8 +92,34 @@
+ 
+ static void vfe_global_reset(struct vfe_device *vfe)
+ {
++	/*
++	 * Bring-up sweep: SM8150 may not share the SM8250 reset map.  Write the
++	 * reset command to every plausible offset and report which one makes a
++	 * status bit appear.  The real write below still uses the SM8250 offset.
++	 */
++	static const u32 cand[] = { 0x1c, 0x0c, 0x08, 0x10, 0x18, 0x14, 0x20, 0x04, 0x00, 0x24 };
++	u32 ack_off = vfe_is_lite(vfe) ? 0x40 : 0x54;
++
++	dev_info(vfe->camss->dev, "raphael-reset: sweep on VFE%d (lite=%d), ack_off=0x%02x\n",
++		 vfe->id, vfe_is_lite(vfe), ack_off);
++
++	for (unsigned i = 0; i < ARRAY_SIZE(cand); i++) {
++		u32 before = readl_relaxed(vfe->base + ack_off);
++
++		writel_relaxed(1, vfe->base + cand[i]);
++		udelay(200);
++		dev_info(vfe->camss->dev,
++			 "  off 0x%02x: status_before=0x%08x status_after=0x%08x\n",
++			 cand[i], before, readl_relaxed(vfe->base + ack_off));
++	}
++
+ 	writel_relaxed(IRQ_MASK_0_RESET_ACK, vfe->base + VFE_IRQ_MASK(0));
+ 	writel_relaxed(GLOBAL_RESET_HW_AND_REG, vfe->base + VFE_GLOBAL_RESET_CMD);
++	dev_info(vfe->camss->dev,
++		 "raphael-reset: after SM8250 write cmd=0x%08x mask=0x%08x status=0x%08x\n",
++		 readl_relaxed(vfe->base + VFE_GLOBAL_RESET_CMD),
++		 readl_relaxed(vfe->base + VFE_IRQ_MASK(0)),
++		 readl_relaxed(vfe->base + ack_off));
+ }
+ 
+ static void vfe_wm_start(struct vfe_device *vfe, u8 wm, struct vfe_line *line)
+@@ -193,8 +219,20 @@
+ 	writel_relaxed(status, vfe->base + VFE_IRQ_CLEAR(0));
+ 	writel_relaxed(IRQ_CMD_GLOBAL_CLEAR, vfe->base + VFE_IRQ_CMD);
+ 
++	/*
++	 * Bring-up: the interrupt does arrive (the GIC count increments) but the
++	 * SM8150 reset-ack bit is evidently not BIT(0) (full) / BIT(17) (lite),
++	 * so the completion never fired.  Log the real status the first times and
++	 * treat a pending reset as complete so the pipeline can be exercised.
++	 */
++	if (status && !completion_done(&vfe->reset_complete))
++		dev_info(vfe->camss->dev,
++			 "VFE%d isr status=0x%08x (reset pending)\n", vfe->id, status);
++
+ 	if (status & IRQ_MASK_0_RESET_ACK)
+ 		vfe_isr_reset_ack(vfe);
++	else if (!completion_done(&vfe->reset_complete))
++		vfe_isr_reset_ack(vfe);
+ 
+ 	if (status & IRQ_MASK_0_BUS_TOP_IRQ) {
+ 		u32 status = readl_relaxed(vfe->base + VFE_BUS_IRQ_STATUS(0));

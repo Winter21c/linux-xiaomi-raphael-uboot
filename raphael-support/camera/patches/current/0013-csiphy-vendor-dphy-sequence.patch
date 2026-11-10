@@ -1,0 +1,252 @@
+--- up/camss/camss-csiphy-2ph-1-0.c	2026-11-10 21:54:55.501083839 +0800
++++ /tmp/camss-final/camss-csiphy-2ph-1-0.c	2026-11-10 21:51:13.266778245 +0800
+@@ -9,6 +9,7 @@
+  */
+ 
+ #include "camss-csiphy.h"
++#include "camss.h"
+ 
+ #include <linux/delay.h>
+ #include <linux/interrupt.h>
+@@ -46,7 +47,7 @@
+ 	u8 hw_version = readl_relaxed(csiphy->base +
+ 				      CAMSS_CSI_PHY_HW_VERSION);
+ 
+-	dev_dbg(dev, "CSIPHY HW Version = 0x%02x\n", hw_version);
++	dev_info(dev, "CSIPHY HW Version = 0x%02x\n", hw_version);
+ }
+ 
+ /*
+@@ -94,6 +95,176 @@
+ 	return settle_cnt;
+ }
+ 
++/* SM8150 CSIPHY = D-PHY v1.1: each lane owns a 0x400 register window
++ * (upstream 2ph_1_0 assumes 0x40) and the global block sits at 0xe00.
++ * Sequence taken verbatim from the vendor cam_csiphy 2ph_v2_1_1 tables.
++ */
++static const struct csiphy_vendor_reg {
++	u16 off;
++	u32 val;
++	u32 mask;
++} csiphy_2ph_1_1_seq[] = {
++	{ 0x094, 0x00000000, 0x00000000 },
++	{ 0x0a0, 0x00000000, 0x00000000 },
++	{ 0x090, 0x0000000f, 0x00000000 },
++	{ 0x098, 0x00000008, 0x00000000 },
++	{ 0x094, 0x00000007, 0x00000001 },
++	{ 0x030, 0x00000000, 0x00000000 },
++	{ 0x000, 0x0000008e, 0x00000000 },
++	{ 0x038, 0x000000fe, 0x00000000 },
++	{ 0x02c, 0x00000001, 0x00000000 },
++	{ 0x034, 0x0000000f, 0x00000000 },
++	{ 0x01c, 0x0000000a, 0x00000000 },
++	{ 0x014, 0x00000060, 0x00000000 },
++	{ 0x03c, 0x000000b8, 0x00000000 },
++	{ 0x004, 0x0000000c, 0x00000000 },
++	{ 0x020, 0x00000000, 0x00000000 },
++	{ 0x008, 0x00000010, 0x00000000 },
++	{ 0x010, 0x00000052, 0x00000000 },
++	{ 0xe94, 0x00000000, 0x00000000 },
++	{ 0xea0, 0x00000000, 0x00000000 },
++	{ 0xe90, 0x0000000f, 0x00000000 },
++	{ 0xe98, 0x00000008, 0x00000000 },
++	{ 0xe94, 0x00000007, 0x00000001 },
++	{ 0xe30, 0x00000000, 0x00000000 },
++	{ 0xe28, 0x00000004, 0x00000000 },
++	{ 0xe00, 0x00000080, 0x00000000 },
++	{ 0xe0c, 0x000000ff, 0x00000000 },
++	{ 0xe38, 0x0000001f, 0x00000000 },
++	{ 0xe2c, 0x00000001, 0x00000000 },
++	{ 0xe34, 0x0000000f, 0x00000000 },
++	{ 0xe1c, 0x0000000a, 0x00000000 },
++	{ 0xe14, 0x00000060, 0x00000000 },
++	{ 0xe3c, 0x000000b8, 0x00000000 },
++	{ 0xe04, 0x0000000c, 0x00000000 },
++	{ 0xe20, 0x00000000, 0x00000000 },
++	{ 0xe08, 0x00000010, 0x00000000 },
++	{ 0xe10, 0x00000052, 0x00000000 },
++	{ 0x494, 0x00000000, 0x00000000 },
++	{ 0x4a0, 0x00000000, 0x00000000 },
++	{ 0x490, 0x0000000f, 0x00000000 },
++	{ 0x498, 0x00000008, 0x00000000 },
++	{ 0x494, 0x00000007, 0x00000001 },
++	{ 0x430, 0x00000000, 0x00000000 },
++	{ 0x400, 0x0000008e, 0x00000000 },
++	{ 0x438, 0x000000fe, 0x00000000 },
++	{ 0x42c, 0x00000001, 0x00000000 },
++	{ 0x434, 0x0000000f, 0x00000000 },
++	{ 0x41c, 0x0000000a, 0x00000000 },
++	{ 0x414, 0x00000060, 0x00000000 },
++	{ 0x43c, 0x000000b8, 0x00000000 },
++	{ 0x404, 0x0000000c, 0x00000000 },
++	{ 0x420, 0x00000000, 0x00000000 },
++	{ 0x408, 0x00000010, 0x00000000 },
++	{ 0x410, 0x00000052, 0x00000000 },
++	{ 0x894, 0x00000000, 0x00000000 },
++	{ 0x8a0, 0x00000000, 0x00000000 },
++	{ 0x890, 0x0000000f, 0x00000000 },
++	{ 0x898, 0x00000008, 0x00000000 },
++	{ 0x894, 0x00000007, 0x00000001 },
++	{ 0x830, 0x00000000, 0x00000000 },
++	{ 0x800, 0x0000008e, 0x00000000 },
++	{ 0x838, 0x000000fe, 0x00000000 },
++	{ 0x82c, 0x00000001, 0x00000000 },
++	{ 0x834, 0x0000000f, 0x00000000 },
++	{ 0x81c, 0x0000000a, 0x00000000 },
++	{ 0x814, 0x00000060, 0x00000000 },
++	{ 0x83c, 0x000000b8, 0x00000000 },
++	{ 0x804, 0x0000000c, 0x00000000 },
++	{ 0x820, 0x00000000, 0x00000000 },
++	{ 0x808, 0x00000010, 0x00000000 },
++	{ 0x810, 0x00000052, 0x00000000 },
++	{ 0xc94, 0x00000000, 0x00000000 },
++	{ 0xca0, 0x00000000, 0x00000000 },
++	{ 0xc90, 0x0000000f, 0x00000000 },
++	{ 0xc98, 0x00000008, 0x00000000 },
++	{ 0xc94, 0x00000007, 0x00000001 },
++	{ 0xc30, 0x00000000, 0x00000000 },
++	{ 0xc00, 0x0000008e, 0x00000000 },
++	{ 0xc38, 0x000000fe, 0x00000000 },
++	{ 0xc2c, 0x00000001, 0x00000000 },
++	{ 0xc34, 0x0000000f, 0x00000000 },
++	{ 0xc1c, 0x0000000a, 0x00000000 },
++	{ 0xc14, 0x00000060, 0x00000000 },
++	{ 0xc3c, 0x000000b8, 0x00000000 },
++	{ 0xc04, 0x0000000c, 0x00000000 },
++	{ 0xc20, 0x00000000, 0x00000000 },
++	{ 0xc08, 0x00000010, 0x00000000 },
++	{ 0xc10, 0x00000052, 0x00000000 },
++	{ 0x094, 0x000000d7, 0x00000000 },
++	{ 0x05c, 0x00000000, 0x00000000 },
++	{ 0x060, 0x000000bd, 0x00000000 },
++	{ 0x064, 0x0000007f, 0x00000000 },
++	{ 0x494, 0x000000d7, 0x00000000 },
++	{ 0x45c, 0x00000000, 0x00000000 },
++	{ 0x460, 0x000000bd, 0x00000000 },
++	{ 0x464, 0x0000007f, 0x00000000 },
++	{ 0x894, 0x000000d7, 0x00000000 },
++	{ 0x85c, 0x00000000, 0x00000000 },
++	{ 0x860, 0x000000bd, 0x00000000 },
++	{ 0x864, 0x0000007f, 0x00000000 },
++	{ 0xc94, 0x000000d7, 0x00000000 },
++	{ 0xc5c, 0x00000000, 0x00000000 },
++	{ 0xc60, 0x000000bd, 0x00000000 },
++	{ 0xc64, 0x0000007f, 0x00000000 },
++};
++
++/*
++ * Bring-up knob: when set, the SM8250-style per-lane writes (0x004 + 0x40*n,
++ * GLBL_PWR_CFG 0x144, ...) are skipped because on SM8150 those offsets land
++ * inside lane 0's 0x400 block and corrupt the vendor programming.
++ */
++static int camss_vendor_seq_only = 1;
++module_param(camss_vendor_seq_only, int, 0644);
++MODULE_PARM_DESC(camss_vendor_seq_only, "use only the vendor D-PHY v1.1 sequence");
++
++/* Bring-up knob: override the per-lane settle register (offset 0x14) value. */
++static int camss_seq_lane14 = -1;
++module_param(camss_seq_lane14, int, 0644);
++MODULE_PARM_DESC(camss_seq_lane14, "override the per-lane 0x14 settle value");
++
++static void csiphy_apply_vendor_seq(struct csiphy_device *csiphy)
++{
++	int i;
++
++	for (i = 0; i < ARRAY_SIZE(csiphy_2ph_1_1_seq); i++) {
++		const struct csiphy_vendor_reg *r = &csiphy_2ph_1_1_seq[i];
++
++		u32 val = r->val;
++
++		if (r->off == 0x14 && camss_seq_lane14 >= 0)
++			val = (u32)camss_seq_lane14;
++		if (r->mask) {
++			u32 cur = readl_relaxed(csiphy->base + r->off);
++
++			writel_relaxed((cur & ~r->mask) | (val & r->mask),
++				       csiphy->base + r->off);
++		} else {
++			writel_relaxed(val, csiphy->base + r->off);
++		}
++	}
++}
++
++/*
++ * Bring-up knob: override the DT lane mapping at stream time so the possible
++ * wiring permutations can be tried without rebuilding the DTB.  Encoding:
++ * (clock_lane << 8) | (data1 << 4) | data0, -1 = keep the DT values.
++ */
++static int camss_lane_override = -1;
++module_param(camss_lane_override, int, 0644);
++MODULE_PARM_DESC(camss_lane_override, "override CSIPHY lanes: (clk<<8)|(d1<<4)|d0");
++
++static void csiphy_apply_lane_override(struct csiphy_lanes_cfg *c)
++{
++	int v = camss_lane_override;
++
++	if (v < 0 || c->num_data < 2)
++		return;
++	c->data[0].pos = v & 0xf;
++	c->data[1].pos = (v >> 4) & 0xf;
++	c->clk.pos = (v >> 8) & 0xf;
++}
++
+ static void csiphy_lanes_enable(struct csiphy_device *csiphy,
+ 				struct csiphy_config *cfg,
+ 				s64 link_freq, u8 lane_mask)
+@@ -103,8 +274,19 @@
+ 	u8 val, l = 0;
+ 	int i = 0;
+ 
++	csiphy_apply_lane_override(c);
++
+ 	settle_cnt = csiphy_settle_cnt_calc(link_freq, csiphy->timer_clk_rate);
+ 
++	/* bring-up: dump the lane block before programming it */
++	dev_info(csiphy->camss->dev,
++		 "csiphy pre link=%lld settle=%u mask=0x%02x num_data=%d clk_pos=%d data_pos=%d,%d glbl_pwr=0x%08x glbl_rst=0x%08x ln0=0x%08x ln1=0x%08x ln2=0x%08x\n",
++		 link_freq, settle_cnt, lane_mask, c->num_data, c->clk.pos,
++		 c->data[0].pos, c->data[1].pos,
++		 readl_relaxed(csiphy->base + 0x144), readl_relaxed(csiphy->base + 0x140),
++		 readl_relaxed(csiphy->base + 0x004), readl_relaxed(csiphy->base + 0x044),
++		 readl_relaxed(csiphy->base + 0x084));
++
+ 	writel_relaxed(0x1, csiphy->base +
+ 		       CAMSS_CSI_PHY_GLBL_T_INIT_CFG0);
+ 	writel_relaxed(0x1, csiphy->base +
+@@ -123,8 +305,9 @@
+ 		else
+ 			l = c->data[i].pos;
+ 
+-		writel_relaxed(0x10, csiphy->base +
+-			       CAMSS_CSI_PHY_LNn_CFG2(l));
++		if (!camss_vendor_seq_only)
++			writel_relaxed(0x10, csiphy->base +
++				       CAMSS_CSI_PHY_LNn_CFG2(l));
+ 		writel_relaxed(settle_cnt, csiphy->base +
+ 			       CAMSS_CSI_PHY_LNn_CFG3(l));
+ 		writel_relaxed(0x3f, csiphy->base +
+@@ -132,6 +315,23 @@
+ 		writel_relaxed(0x3f, csiphy->base +
+ 			       CAMSS_CSI_PHY_INTERRUPT_CLEARn(l));
+ 	}
++
++	/* SM8150: replay the vendor D-PHY v1.1 sequence last so it wins */
++	csiphy_apply_vendor_seq(csiphy);
++
++	/* bring-up: after programming, give the PHY 100 ms and read it back */
++	msleep(100);
++	dev_info(csiphy->camss->dev,
++		 "csiphy post pwr=0x%08x rst=0x%08x irqcmd=0x%08x ln0cfg2=0x%08x ln1cfg2=0x%08x ln2cfg2=0x%08x clkcfg2=0x%08x irqsts0=0x%08x irqsts1=0x%08x\n",
++		 readl_relaxed(csiphy->base + 0x144),
++		 readl_relaxed(csiphy->base + 0x140),
++		 readl_relaxed(csiphy->base + 0x164),
++		 readl_relaxed(csiphy->base + 0x004 + 0x40 * 0),
++		 readl_relaxed(csiphy->base + 0x004 + 0x40 * 1),
++		 readl_relaxed(csiphy->base + 0x004 + 0x40 * 2),
++		 readl_relaxed(csiphy->base + 0x004 + 0x40 * 3),
++		 readl_relaxed(csiphy->base + 0x18c),
++		 readl_relaxed(csiphy->base + 0x190));
+ }
+ 
+ static void csiphy_lanes_disable(struct csiphy_device *csiphy,
