@@ -596,3 +596,39 @@ The practical way forward is to give the CSIPHY a **0x2000 window in our own DTB
 (our driver maps what we tell it; nothing else claims 0xac67000..0xac68fff because
 mainline camss uses 0x1000 strides) and re-apply the common records there - a single
 targeted change instead of guessing.
+
+## CSID is configured and running; the data never arrives from the PHY
+
+Reading the CSID registers through a probe module **during a live stream** (safe
+address, CSID window only):
+
+```
+csid_rx: [0x020] = 0x00000000   (csi2 rx irq status)
+csid_rx: [0x024] = 0x00000000   (mask)
+csid_rx: [0x028] = 0x00000000   (clear)
+csid_rx: [0x100] = 0x00032103   (rx_cfg0 - OUR configuration, non-zero!)
+csid_rx: [0x104] = 0x00000001   (rx_cfg1)
+csid_rx: [0x070] = 0x00000000   (top irq status)
+```
+
+`rx_cfg0 = 0x00032103` decodes to 2 active lanes, lane assignment 0x21 and PHY 2,
+i.e. exactly what the driver was asked to program.  So the earlier
+"`rx_cfg0` reads back 0" observations were a **timing artifact** of reading before
+`csid_set_stream()` had run - the CSID is configured and live.
+
+That leaves the PHY as the only broken link, and this round removed three more
+hypotheses:
+
+* **lane permutation** - the new `camss_lane_override` parameter swept
+  `0x210, 0x120, 0x201, 0x102, 0x021, 0x012` plus the DT default at runtime; every
+  variant ended with `csid0 0->0`, `csiphy2=0`, `bytes=0`;
+* **SM8250-style writes corrupting the vendor programming** - a new
+  `camss_vendor_seq_only=1` mode applies *only* the 103-record vendor D-PHY v1.1
+  sequence and skips the 0x004+0x40n / 0x144 writes entirely.  Same result: 0 bytes,
+  `msm_csid0` 0;
+* **wrong csiphy for the tele camera** - the stock DT confirms
+  `qcom,cam-sensor@1 -> csiphy-sd-index = <2>`, so csiphy2 is correct.
+
+Note also that the CSIPHY interrupt counters are not a reliable signal yet: the
+driver still arms `INTERRUPT_MASKn` at the SM8250 offsets (0x1ac + 4n), which in the
+0x400-stride layout land inside lane 0, so a zero counter does not prove "no data".
