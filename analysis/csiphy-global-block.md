@@ -164,3 +164,49 @@ programming any more.  The most probable candidates left:
    never cross-checked against the vendor's `cam_ife_csid_hw_ver1_hw_cfg`);
 3. the third one is timing: the vendor starts the sensor *after* the PHY sequence
    completes, while camss starts subdevs in a fixed order.
+
+## Round 58: the CSID is verified correct and the PHY is fully programmed - still nothing
+
+Probed the CSID registers **during a live stream** with the debug module:
+
+```
+rx_cfg0 [0x100] = 0x00032103   -> lane_cnt=2, assign=0x21, phy=2   (correct)
+rx_cfg1 [0x104] = 0x00000001
+RX IRQ status [0x02c] = 0      -> no packet
+[0x070] = [0x074] = [0x078] = 0 -> no error either
+```
+
+so the receiver is configured exactly as intended, is clocked, reports no errors, and
+simply never sees a start-of-packet.  Combined with the fully programmed PHY (reset,
+common, IRQ, per-rate PLL for all six tables, lane enable 0x1/0x3/0x7 - every run
+`oops=0`), the conclusion is that **the PHY is not emitting anything at all**, rather
+than emitting bad data.
+
+Also re-tested the 3280x2464 mode (the only OV8856 mode whose computed lane rate,
+~1.21 Gbps, reaches the smallest vendor PLL table) with rate tables 0 and 1:
+
+```
+3280x2464 rate=0: bytes=0 csid0=0 oops=0
+3280x2464 rate=1: bytes=0 csid0=0 oops=0
+1640x1232 rate=0: bytes=0 csid0=0 oops=0
+```
+
+so a rate mismatch between the sensor and the PLL table is ruled out as the cause.
+
+### What is left, stated precisely
+
+The PHY is programmed with every register the vendor binary contains for v2.1.1 and
+still emits nothing, the CSID is verified good, and the sensor reports streaming with
+MIPI output enabled.  The two remaining candidates both live outside the tables that
+could be extracted:
+
+1. the vendor's `cam_csiphy_config_dev` performs an extra step after the tables that
+   depends on runtime state (lane count and rate are passed in as arguments, and the
+   `csiphy_v2_1_1` hw_info offsets 0x1028 / 0x10b0 / 0x1058 are never written by us);
+2. the sensor module may need a supply or a reset sequence that differs from what the
+   vendor node describes (the tele module reports streaming but may not actually be
+   driving its MIPI outputs without it).
+
+Evidence for (1) is the strongest: three hw_info offsets remain unused, and the vendor
+struct also carries `status_regs_2_1_1` at 0x340/0xc0/0x358/0x758/0xb58 - registers
+whose values we have never read back and compared against a working stream.
