@@ -46,3 +46,23 @@ the writes and `MOTOR_FAULT` stays high (no fault reported).
 (0.3 s .. 2 s, four dir/M0/M1 permutations), so either the motor is not actually
 turning, the hall is not a position sensor, or the module needs a supply that is not
 `MOTOR_EN`.  This needs a visual check of the phone while driving the motor.
+
+## Additional experiments (rounds 49)
+
+Two more controls were added to the DTB and exercised:
+
+* `motor:hall_rst` (gpio11, `DIGITAL_HALL1_RSTN`) - releasing the hall reset does not
+  change the hall input;
+* `motor:camf_ldo` (gpio95, `CAMF_LDO_EN`) - enabling the front-camera LDO (which
+  plausibly powers the motor and the hall) before driving still leaves the hall low.
+
+The full sequence (LDO on, enable, sleep release, hall reset release, both drive
+polarities, four 250 ms samples each) produced `hall=low` throughout while
+`MOTOR_FAULT` stayed high.  Display and modem remained healthy (`drm=5`,
+`modem=running`).
+
+So either the hall is not a position sensor for this mechanism, its output needs a
+pull-up that mainline does not configure (the vendor `motor_gpio_default` pin
+configuration uses `bias-pull-up` while mainline leaves these pins pulled down), or
+the motor really does not move because of a supply we have not found.  This needs a
+human watching the phone while the sequence runs.

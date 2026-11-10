@@ -701,3 +701,15 @@ Current state of every hypothesis:
 | settle timing | 8 values swept, no traffic |
 | sensor rails | checked, plausible |
 | device/host power and clocks | all on during stream |
+
+## Round 49: the complete lane sweep is negative
+
+Extending the runtime lane sweep to the remaining permutations
+(`0x010, 0x001, 0x030, 0x300, 0x013, 0x310` - i.e. data lanes 0/1 with clock 0,
+data 0/1 with clock 3, and the swapped variants) still gives `bytes=0` and
+`csid0_irq=0` for every one of them, so the CSI-2 lane mapping hypothesis is now
+exhausted (12 permutations total across the two sweeps).
+
+The last untried discriminator is a **different sensor on a different PHY**: bringing
+up the IMX586 on csiphy0 (CCI0 master 0, address 0x1a) separates "OV8856 module/mode
+problem" from "the SM8150 PHY never receives on any port".
