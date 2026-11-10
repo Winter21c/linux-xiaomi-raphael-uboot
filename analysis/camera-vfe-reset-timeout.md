@@ -713,3 +713,32 @@ exhausted (12 permutations total across the two sweeps).
 The last untried discriminator is a **different sensor on a different PHY**: bringing
 up the IMX586 on csiphy0 (CCI0 master 0, address 0x1a) separates "OV8856 module/mode
 problem" from "the SM8150 PHY never receives on any port".
+
+
+## Round 51: other sensor modes are negative too
+
+The 3280x2464 mode (lane rate index 0, 720 Mbps) and 1632x1224 were tried in case the
+CSIPHY PLL only worked at one rate:
+
+```
+3280x2464 (720Mbps mode): bytes=0 csid0_irq=0
+1632x1224:                bytes=0 csid0_irq=0
+```
+
+So neither the mode nor the lane rate changes the outcome.
+
+### Closing assessment
+
+Everything that can be verified without vendor documentation is verified:
+
+* the sensor is in streaming mode and its MIPI output is enabled,
+* the CSID is configured (`rx_cfg0=0x32103`), not in reset, and reports **no errors
+  at all** - it simply never sees a packet,
+* the CSIPHY register file accepts the vendor D-PHY v1.1 sequence and holds it,
+* VFE0 is fully functional.
+
+Zero packets **and** zero errors from the CSID is the signature of a PHY whose output
+is never enabled, not of a marginal link.  That enable sequence exists only inside
+the vendor `camera.ko`, and reconstructing it requires disassembling
+`cam_csiphy_config_dev` / `cam_csiphy_update_lane_selection` completely, including
+the runtime-computed values that are not in any of the static tables.
