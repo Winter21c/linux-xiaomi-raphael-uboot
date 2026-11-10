@@ -291,12 +291,12 @@ static void csiphy_program_global(struct csiphy_device *csiphy)
 			const struct csiphy_rate_rec *r = &t->recs[i];
 
 			if (r->mask) {
-				u32 cur = readl_relaxed(g + r->off);
+				u32 cur = readl_relaxed(csiphy->base + r->off);
 
 				writel_relaxed((cur & ~r->mask) | (r->val & r->mask),
-					       g + r->off);
+					       csiphy->base + r->off);
 			} else {
-				writel_relaxed(r->val, g + r->off);
+				writel_relaxed(r->val, csiphy->base + r->off);
 			}
 			if (r->delay)
 				udelay(r->delay);

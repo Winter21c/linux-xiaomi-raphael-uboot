@@ -69,3 +69,30 @@ The block is now programmed but the CSID still receives nothing (`bytes=0`,
 
 This is the first time the vendor's complete PHY register set has been identified for
 this SoC, so the remaining work is now concrete instead of speculative.
+
+## Round 54: the two register spaces are different, and that difference crashes
+
+The vendor tables target **two different base addresses**, and mixing them up takes
+the kernel down:
+
+* `csiphy_reset_*`, `csiphy_common_reg`, `csiphy_irq_reg`, `csiphy_lane_en_reg` are
+  addressed from the **global page**, i.e. `phy_base + 0x1000`;
+* `csiphy_2ph_*_reg` and the twelve `datarate_211_*` tables are addressed from the
+  **lane page**, i.e. `phy_base` (their offsets are 0x000..0x7ff, e.g. 0x274,
+  0x674, 0x214 - block 0x400 is data lane 1).
+
+Applying the data-rate table to the global pointer made the kernel oops inside
+`call_s_stream` (the offsets 0x6xx land in an unpowered page).  The driver now
+writes the rate records through `csiphy->base` and the control records through the
+global mapping.
+
+Remaining verification is mechanical: with the split in place the sequence is
+
+```
+global: reset enter/exit, common, IRQ, lane enable
+lane:   vendor 103-record init, then the per-rate PLL table
+```
+
+and the open questions are the same three: the correct `lane_en` mask, which of the
+twelve PLL tables matches 1640x1232, and the three unused `hw_info` offsets
+(0x1028 / 0x10b0 / 0x1058).
