@@ -632,3 +632,36 @@ hypotheses:
 Note also that the CSIPHY interrupt counters are not a reliable signal yet: the
 driver still arms `INTERRUPT_MASKn` at the SM8250 offsets (0x1ac + 4n), which in the
 0x400-stride layout land inside lane 0, so a zero counter does not prove "no data".
+
+## Sensor <-> PHY <-> CCI mapping re-verified
+
+The stock DT puts the tele camera at csiphy2 with CCI device 0 master 1:
+
+```
+qcom,cam-sensor@1:  csiphy-sd-index = <2>   cci-device = <0>   cci-master = <1>
+```
+
+and the running system exposes exactly two CCI buses (`i2c-2`, `i2c-3`), with the
+OV8856 bound at `3-0036`, i.e. the **second** master - which matches master 1.  So
+the sensor, the PHY instance and the CCI master all line up; there is no routing
+mistake to fix here.
+
+Also verified this round: `0x4800 = 0x44` is what the vendor mode tables write (not
+something we corrupted), and the driver's `data_lanes = 2` / `link_freq_index = 1`
+(360 Mbps) pair is consistent with the DT.
+
+## Where that leaves it
+
+With CSID confirmed configured and the sensor confirmed transmitting, the only
+component that has never shown any sign of life is the **CSIPHY data path**: its
+register file accepts writes, but nothing ever reaches CSID and no lane-level status
+changes.  Options for the next rounds, in order of information value:
+
+1. bring up **IMX586** (csiphy0 / CCI0 master 0) and see whether *any* camera can
+   deliver a packet - this separates "OV8856 module/mode problem" from "the SM8150
+   PHY never receives on this port";
+2. if IMX586 also yields nothing, the next step is the vendor's *dynamic* PHY
+   enable sequence (`cam_csiphy_config_dev` / `cam_csiphy_update_lane_selection`),
+   which needs the base pointer for the lane-selection register to be resolved;
+3. the front camera's pop-up motor is an independent subsystem and could be done in
+   parallel without touching CSI-2 at all.
