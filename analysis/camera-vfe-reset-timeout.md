@@ -665,3 +665,39 @@ changes.  Options for the next rounds, in order of information value:
    which needs the base pointer for the lane-selection register to be resolved;
 3. the front camera's pop-up motor is an independent subsystem and could be done in
    parallel without touching CSI-2 at all.
+
+## Round 48: reset and settle hypotheses eliminated; upstream has no SM8150 camss
+
+Three more knobs were added and swept, all with the same result (`bytes=0`,
+`csid0_irq=0`):
+
+* `camss_csid_rst_cmd` - the CSID reset trigger value.  Tried `0x7fff` (the value
+  upstream 4_7 uses), `0x1`, and `-1` which skips the reset entirely.  Worth noting
+  that with the vendor register map the reset now completes without the
+  "CSID reset timeout" warning, so the CSID is not stuck in reset.
+* `camss_seq_lane14` - the per-lane settle register (offset 0x14) from the vendor
+  table.  Swept `0x10/0x20/0x30/0x40/0x60/0x80/0xc0` plus the vendor default;
+  no value produces traffic.
+* Sensor rails audited against the shipped DT: `avdd = vreg_bob 3.01 V`,
+  `dovdd = camera_viodd 1.8 V`, `dvdd = camera_vdig_tele 1.35 V`,
+  `vl17 = vreg_l17a_3p0 2.86 V` - all plausible for OV8856, so this is not a
+  supply mistake either.
+
+Also checked: **upstream camss has no SM8150 support at all** (`grep -c sm8150` on
+`camss.c` = 0), so this port is the first and there is no reference configuration to
+copy - the CSID/CSIPHY bring-up for this SoC has to come from the vendor binary.
+
+Current state of every hypothesis:
+
+| hypothesis | status |
+|---|---|
+| sensor not streaming | eliminated (0x0100=0x01, 0x4800=0x44) |
+| CSID register map | fixed with the vendor 175_200 table |
+| CSID stuck in reset | eliminated (reset completes, skipping it changes nothing) |
+| CSID output path unconfigured | `csid_wrapper`/IO-path mux only exists on SM8550+; no
+  such region in the SM8150 DT |
+| CSIPHY lane map | vendor D-PHY v1.1 sequence applied (verified in registers) |
+| CSI-2 lane permutation | 6 permutations swept, no traffic |
+| settle timing | 8 values swept, no traffic |
+| sensor rails | checked, plausible |
+| device/host power and clocks | all on during stream |
