@@ -28,6 +28,38 @@ vendor-only initialisation sequence.
 | CSIPHY2 | vendor 103-record D-PHY v1.1 sequence applied and holds |
 | front pop-up motor pins | 8 gpio exposed as `/sys/class/leds/motor:*`, driven and confirmed at pin level |
 
+## The decisive discovery (rounds 53-55)
+
+The vendor `camera.ko` keeps a complete descriptor per PHY version.  Resolving the
+relocations of the v2.1.1 descriptor revealed **the register block mainline never
+touched**:
+
+| table | base | offsets |
+|---|---|---|
+| `csiphy_reset_enter/exit_reg` | phy_base **+ 0x1000** | 0x1000 |
+| `csiphy_common_reg` | phy_base + 0x1000 | 0x1084 / 0x1018 / 0x101c |
+| `csiphy_irq_reg` | phy_base + 0x1000 | 0x102c .. 0x1040 |
+| `csiphy_lane_en_reg` | phy_base + 0x1000 | **0x1014** |
+| `csiphy_2ph_v2_1_1_reg` | phy_base (lane page) | 0x000 .. 0x7ff |
+| `datarate_211_{1p2..5}Gsps` (12) | phy_base (lane page) | 0x214 .. 0xa90 |
+
+The DT only maps 0x1000, so mainline programmed the lane registers but **never the
+reset / IRQ / common / lane-enable block** - that is why the PHY output was never
+enabled.  Measured with a live stream, the second page is live and writable
+(`global[0x014] <- 0x3` sticks, `global[0x000]` reads 0 so it is not a lane block).
+
+The driver now maps that page at probe (`devm_ioremap`, `IS_ERR` checked) and runs
+the vendor sequence at lane-enable time; the log confirms
+`0x1000=0x0e 0x1014=0x03 0x1018=0x01`.
+
+Still open, and now concrete instead of speculative:
+
+1. the correct `lane_en` mask semantics (0x1/0x3/0x7/0xf/0x1f/0x3f all tried),
+2. which of the twelve PLL tables matches this mode - applying one currently aborts
+   the kernel in `csiphy_lanes_enable` (Oops 96000047), so that path is opt-in
+   (`camss_phy_rate`, default -1) and does not affect the shipped configuration,
+3. the three unused `csiphy_v2_1_1` hw_info offsets 0x1028 / 0x10b0 / 0x1058.
+
 ## Not working
 
 * **CSI-2 data**: the CSID receives zero packets and reports zero errors, i.e. the
