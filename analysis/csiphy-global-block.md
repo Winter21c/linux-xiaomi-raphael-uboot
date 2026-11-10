@@ -96,3 +96,37 @@ lane:   vendor 103-record init, then the per-rate PLL table
 and the open questions are the same three: the correct `lane_en` mask, which of the
 twelve PLL tables matches 1640x1232, and the three unused `hw_info` offsets
 (0x1028 / 0x10b0 / 0x1058).
+
+## Round 55: the per-rate PLL path faults, and the default configuration is safe
+
+Applying a `datarate_211_*` table aborts the kernel inside
+`csiphy_lanes_enable+0x544` with `Oops: 96000047` (data abort, translation fault),
+right after the driver logs `csiphy rate table: 1.2 Gsps (22 records)`:
+
+```
+csid0 rx_cfg0: wrote=0x00200211 readback=0x00000000 (lane_cnt=2 assign=0x21 phy=2)
+csiphy rate table: 1.2 Gsps (22 records)
+Internal error: Oops: 0000000096000047 [#1]  SMP
+pc : csiphy_lanes_enable+0x544/0x60c [qcom_camss]
+```
+
+Facts established while chasing it:
+
+* all 252 extracted offsets are 0x214..0xa90, i.e. inside the 0x1000 lane window;
+* moving the global page ioremap out of `lanes_enable` (into probe, with
+  `IS_ERR` handling via `devm_ioremap`) did **not** change the fault, so the
+  mapping was never the problem;
+* the fault only happens when `camss_phy_rate >= 0` is passed, i.e. **the default
+  configuration (`camss_phy_rate = -1`) never touches this path**.
+
+So the shipped state is safe: the global-block sequence (reset/common/IRQ/lane
+enable) runs and is verified, while the per-rate PLL tables are opt-in and still
+need work.  The most likely causes left are the record layout/packing assumption
+(the vendor record is four u32 while the generated struct is
+`{u16,u32,u32,u16}`) and whether the vendor programs the rate table against a
+*different* per-lane base (the offsets 0x2xx/0x6xx suggest lane 0 and lane 1 blocks
+plus a 0x200 offset, not a flat 0..0x1000 space).
+
+Recommendation for whoever continues: re-verify the packing by disassembling the
+consumer of `datarate_211_*` (the loop that walks the table) before trusting the
+generated C struct.

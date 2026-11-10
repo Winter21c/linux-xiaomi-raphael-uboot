@@ -246,10 +246,10 @@ MODULE_PARM_DESC(camss_seq_lane14, "override the per-lane 0x14 settle value");
  */
 static void csiphy_program_global(struct csiphy_device *csiphy)
 {
-	void __iomem *g = ioremap(csiphy->base_global_phys, 0x1000);
+	void __iomem *g = csiphy->base_global;
 
 	if (!g) {
-		dev_err(csiphy->camss->dev, "cannot map CSIPHY global block\n");
+		dev_err(csiphy->camss->dev, "CSIPHY global block not mapped\n");
 		return;
 	}
 
@@ -310,7 +310,6 @@ static void csiphy_program_global(struct csiphy_device *csiphy)
 	dev_info(csiphy->camss->dev,
 		 "csiphy gbl after:  0x1000=0x%08x 0x1014=0x%08x 0x1018=0x%08x\n",
 		 readl_relaxed(g), readl_relaxed(g + 0x014), readl_relaxed(g + 0x018));
-	iounmap(g);
 }
 
 static void csiphy_apply_vendor_seq(struct csiphy_device *csiphy)
