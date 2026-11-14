@@ -6,31 +6,33 @@
  * (SM8150 / Xiaomi Redmi K20 Pro "raphael")
  *
  * Register layout and programming sequence recovered from the device's own
- * vendor kernel (see csiphy_v1_1_tables.h for the extraction):
+ * vendor kernel (see csiphy_v1_1_tables.h for how it was extracted):
  *
  *   cam_csiphy_config_dev (vendor 0x390ff88):
  *       lane_mask = build_mask(lane_mask_field)
- *       write reset table, dispatching on record->type
- *       for each enabled lane i:
- *           for each record of lane_block[i]:
- *               type 0 -> record->value
- *               type 1 -> lane_mask
- *               type 2 -> low byte of the rate field
- *               type 3 -> next byte of the rate field
- *               delay  -> usleep_range(delay * 1000, ...)
+ *       write the reset table, dispatching on record->type
+ *       for each enabled lane i, for each record of lane_block[i]:
+ *           type 0 -> record->value
+ *           type 1 -> lane_mask
+ *           type 2 -> low byte  of (rate / 88)
+ *           type 3 -> next byte of (rate / 88)
+ *           delay  -> usleep_range(delay * 1000, ...)
  *   cam_csiphy_cphy_data_rate_config (vendor 0x390fd2c):
- *       for i < 11: write 2ph_table[i] to base + offset
+ *       for i < 11: cam_io_w(base + rec->offset, rec->value)
  *
- * Unlike the older 2ph v1.0 PHY:
- *   - data lanes live at 0x000 / 0x200 / 0x400 and the clock lane at 0x700
- *   - the control block is at 0x800, not 0x140
- *   - interrupt masks are at 0x82c..0x854
- *   - everything fits in the 0x1000 window the device tree maps, so there is no
- *     second register page (the Mi 9 PHY's base+0x1000 block does not exist here)
+ * Register map (all inside the 0x1000 window the device tree maps):
+ *   0x000 data lane 0, 0x200 data lane 1, 0x400 data lane 2,
+ *   0x700 clock lane, 0x800 control, 0x814/0x818/0x81c clock,
+ *   0x82c..0x854 interrupt masks.
+ *
+ * The "rate / 88" derivation comes from the vendor table itself: the type-2
+ * record for the data lanes writes 0x0e = 14, and 14 * 88 = 1232, which is the
+ * OV8856 link rate in Mbit/s for its 2-lane modes.
  */
 
 #include <linux/delay.h>
 #include <linux/io.h>
+#include <linux/math64.h>
 
 #include "camss-csiphy.h"
 #include "camss-csiphy-2ph-1-1.h"
@@ -38,7 +40,11 @@
 
 #define CSIPHY_1_1_MAX_DATA_LANES	3
 
-/* register base of each combo block, in the order the vendor tables store them */
+/*
+ * Register bases of the four combo blocks, in the order the vendor stores them.
+ * Note that the clock lane is the second block and sits at 0x700, which is
+ * exactly the 0x80 bit of the enable mask.
+ */
 static const struct csiphy_reg_1_1 *const csiphy_1_1_lane_tbl[4] = {
 	csiphy_1_1_lane0,	/* 0x000, data lane 0 */
 	csiphy_1_1_lane1,	/* 0x700, clock lane  */
@@ -47,20 +53,20 @@ static const struct csiphy_reg_1_1 *const csiphy_1_1_lane_tbl[4] = {
 };
 
 /*
- * Build the lane enable mask exactly like the vendor: the input lane mask uses
- * bit 1 for the clock lane (remapped to bit 7), the data lanes are packed into
- * bits 0..3.
+ * csiphy_1_1_get_lane_mask - build the enable mask the way the vendor does
+ * @lane_cfg: CSI-2 lane configuration
+ *
+ * The vendor lane mask uses bit 1 for the clock lane and remaps it to bit 7;
+ * the data lanes are packed into bits 0..3.
  */
-static u8 csiphy_1_1_lane_mask(struct csiphy_device *csiphy)
+static u8 csiphy_1_1_get_lane_mask(struct csiphy_lanes_cfg *lane_cfg)
 {
-	struct csiphy_lanes_cfg *cfg = &csiphy->cfg.csi2->lane_cfg;
-	u8 in = 0;
-	u8 out = 0;
+	u8 in = 0, out = 0;
 	int i, bit;
 
-	for (i = 0; i < cfg->num_data; i++)
-		in |= 1 << cfg->data[i].pos;
-	in |= 1 << 1;			/* clock lane on input bit 1 */
+	for (i = 0; i < lane_cfg->num_data; i++)
+		in |= 1 << lane_cfg->data[i].pos;
+	in |= 1 << 1;			/* clock lane sits on bit 1 */
 
 	if (in & 0x2)
 		out = 0x80;
@@ -77,15 +83,25 @@ static u8 csiphy_1_1_lane_mask(struct csiphy_device *csiphy)
 	return out;
 }
 
+static u32 csiphy_1_1_rate_code(s64 link_freq)
+{
+	if (link_freq <= 0)
+		return 0;
+
+	/* link_freq is in Hz; the vendor works in Mbit/s divided by 88 */
+	return (u32)div_s64(link_freq, 1000000) / 88;
+}
+
 static void csiphy_1_1_write_rec(struct csiphy_device *csiphy,
-				 const struct csiphy_reg_1_1 *r, u8 lane_mask)
+				 const struct csiphy_reg_1_1 *r,
+				 u8 lane_mask, u32 rate)
 {
 	u32 val;
 
 	switch (r->type) {
 	case 1:  val = lane_mask; break;
-	case 2:  val = 0; break;
-	case 3:  val = 0; break;
+	case 2:  val = rate & 0xff; break;
+	case 3:  val = (rate >> 8) & 0xff; break;
 	default: val = r->value; break;
 	}
 
@@ -110,28 +126,17 @@ static void csiphy_1_1_reset(struct csiphy_device *csiphy)
 	usleep_range(1000, 1010);
 }
 
-static void csiphy_1_1_regs(struct csiphy_device *csiphy)
-{
-	u8 mask = csiphy_1_1_lane_mask(csiphy);
-	int i;
-
-	for (i = 0; i < ARRAY_SIZE(csiphy_1_1_reset); i++)
-		csiphy_1_1_write_rec(csiphy, &csiphy_1_1_reset[i], mask);
-
-	for (i = 0; i < ARRAY_SIZE(csiphy_1_1_irq); i++)
-		csiphy_1_1_write_rec(csiphy, &csiphy_1_1_irq[i], mask);
-}
-
 static void csiphy_1_1_lanes_enable(struct csiphy_device *csiphy,
-				    struct csiphy_config *cfg)
+				    struct csiphy_config *cfg,
+				    s64 link_freq, u8 lane_mask)
 {
 	struct csiphy_lanes_cfg *lc = &cfg->csi2->lane_cfg;
-	u8 lane_mask = csiphy_1_1_lane_mask(csiphy);
+	u32 rate = csiphy_1_1_rate_code(link_freq);
 	int i, j;
 
 	dev_dbg(csiphy->camss->dev,
-		"csiphy%d v1.1: %d data lanes, enable mask 0x%02x\n",
-		csiphy->id, lc->num_data, lane_mask);
+		"csiphy%d v1.1: %d data lanes, mask 0x%02x, rate code 0x%x\n",
+		csiphy->id, lc->num_data, lane_mask, rate);
 
 	csiphy_1_1_reset(csiphy);
 	writel_relaxed(0x01, csiphy->base + 0x800);
@@ -143,17 +148,18 @@ static void csiphy_1_1_lanes_enable(struct csiphy_device *csiphy,
 		for (j = 0; j < ARRAY_SIZE(csiphy_1_1_lane0); j++)
 			csiphy_1_1_write_rec(csiphy,
 					     &csiphy_1_1_lane_tbl[which][j],
-					     lane_mask);
+					     lane_mask, rate);
 	}
 
 	/* clock lane block (0x700) */
 	for (j = 0; j < ARRAY_SIZE(csiphy_1_1_lane1); j++)
 		csiphy_1_1_write_rec(csiphy, &csiphy_1_1_lane_tbl[1][j],
-				     lane_mask);
+				     lane_mask, rate);
 
 	/* 0x82c..0x854 interrupt masks */
 	for (i = 0; i < ARRAY_SIZE(csiphy_1_1_2ph); i++)
-		csiphy_1_1_write_rec(csiphy, &csiphy_1_1_2ph[i], lane_mask);
+		csiphy_1_1_write_rec(csiphy, &csiphy_1_1_2ph[i],
+				     lane_mask, rate);
 
 	writel_relaxed(0x01, csiphy->base + 0x800);
 }
@@ -164,9 +170,9 @@ static void csiphy_1_1_lanes_disable(struct csiphy_device *csiphy,
 	writel_relaxed(0x00, csiphy->base + 0x800);
 }
 
-static irqreturn_t csiphy_1_1_isr(int irq, void *data)
+static irqreturn_t csiphy_1_1_isr(int irq, void *dev)
 {
-	struct csiphy_device *csiphy = data;
+	struct csiphy_device *csiphy = dev;
 	u32 status = readl_relaxed(csiphy->base + 0x82c);
 
 	if (!status)
@@ -176,8 +182,33 @@ static irqreturn_t csiphy_1_1_isr(int irq, void *data)
 	return IRQ_HANDLED;
 }
 
+/*
+ * csiphy_1_1_init - called before the ioremap, so it must not touch registers.
+ */
+static int csiphy_1_1_init(struct csiphy_device *csiphy)
+{
+	return 0;
+}
+
+/*
+ * csiphy_1_1_hw_version_read - informational only.  0x828 is the lowest control
+ * register this PHY is known to implement (the vendor common table writes it),
+ * and the whole block is powered and clocked when this runs.
+ */
+static void csiphy_1_1_hw_version_read(struct csiphy_device *csiphy,
+				       struct device *dev)
+{
+	u32 hw = readl_relaxed(csiphy->base + 0x828);
+
+	dev_dbg(dev, "CSIPHY%d v1.1 status 0x828 = 0x%08x\n",
+		csiphy->id, hw);
+}
+
 const struct csiphy_hw_ops csiphy_ops_2ph_1_1 = {
-	.regs = csiphy_1_1_regs,
+	.get_lane_mask = csiphy_1_1_get_lane_mask,
+	.hw_version_read = csiphy_1_1_hw_version_read,
+	.init = csiphy_1_1_init,
+	.reset = csiphy_1_1_reset,
 	.lanes_enable = csiphy_1_1_lanes_enable,
 	.lanes_disable = csiphy_1_1_lanes_disable,
 	.isr = csiphy_1_1_isr,
