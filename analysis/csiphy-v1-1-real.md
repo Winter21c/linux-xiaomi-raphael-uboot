@@ -50,12 +50,19 @@ device tree already maps, so the mainline mapping is correct - the earlier
 
 ```c
 struct csiphy_reg_1_1 {
-        u32 offset;
-        u32 value;
-        u32 type;        /* +8, compared against 3, 4-way switch */
-        u32 delay_ms;    /* +12, multiplied by 1000, passed to usleep_range */
+        u32 offset;      /* +0  */
+        u32 value;       /* +4  */
+        u32 delay_ms;    /* +8  : "ldr w8, [x, #8]", *1000, usleep_range() */
+        u32 type;        /* +12 : "ldr w10, [x, #12]", range-checked, jump table */
 };
 ```
+
+**Correction (round 61):** an earlier version of this document had `type` and
+`delay_ms` swapped.  The disassembly is unambiguous: at 0xaca24c and 0xaca35c the
+field at **+12** is the one that is compared and switched on, and at 0xaca2b8 and
+0xaca3ec the field at **+8** is the one multiplied by 1000 and passed to
+`usleep_range`.  With the wrong order the reset sequence came out as
+"0x800 = 1, delay 0" instead of "0x800 = 1, delay 1 ms, 0x800 = 0".
 
 `cam_csiphy_config_dev` maps `type` for the lane tables as:
 
@@ -136,5 +143,9 @@ register of each enabled block (`0x000`, `0x200`, `0x700` for a 2-lane sensor).
 | lane mask algorithm | proven |
 | lane block roles | proven (clock at 0x700) |
 | `csiphy_common_reg_1_1` decode | **open** - values do not look like write pairs |
-| mainline driver | written, **not yet compiled** |
-| frames on mainline | not yet attempted |
+| mainline driver | written, **syntax-checked** against stub headers (round 61) |
+| frames on mainline | not yet attempted (needs the device) |
+
+Two compile-breaking defects were found and fixed by the round-61 syntax check:
+the register table `csiphy_1_1_reset[]` collided with a function of the same name,
+and the struct field order was swapped.  Neither would have compiled.

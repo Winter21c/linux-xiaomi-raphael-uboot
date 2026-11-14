@@ -10,7 +10,8 @@
  *
  *   cam_csiphy_config_dev (vendor 0x390ff88):
  *       lane_mask = build_mask(lane_mask_field)
- *       write the reset table, dispatching on record->type
+ *       write the reset table, dispatching on record->type (field +12) and
+ *       honouring record->delay_ms (field +8)
  *       for each enabled lane i, for each record of lane_block[i]:
  *           type 0 -> record->value
  *           type 1 -> lane_mask
@@ -112,10 +113,11 @@ static void csiphy_1_1_write_rec(struct csiphy_device *csiphy,
 }
 
 /*
- * csiphy_1_1_reset - the vendor reset sequence:
- *   0x814 = 0xd5, 0x818 = 1, 0x81c = 2, then 0x800 pulsed 1 -> 0
+ * csiphy_1_1_reset - the vendor reset table, inlined because ->reset() runs at
+ * power-on where csiphy->cfg.csi2 does not exist yet:
+ *   0x814 = 0xd5, 0x818 = 1, 0x81c = 2, 0x800 = 1, 1 ms, 0x800 = 0
  */
-static void csiphy_1_1_reset(struct csiphy_device *csiphy)
+static void csiphy_1_1_hw_reset(struct csiphy_device *csiphy)
 {
 	writel_relaxed(0xd5, csiphy->base + 0x814);
 	writel_relaxed(0x01, csiphy->base + 0x818);
@@ -123,7 +125,6 @@ static void csiphy_1_1_reset(struct csiphy_device *csiphy)
 	writel_relaxed(0x01, csiphy->base + 0x800);
 	usleep_range(1000, 1010);
 	writel_relaxed(0x00, csiphy->base + 0x800);
-	usleep_range(1000, 1010);
 }
 
 static void csiphy_1_1_lanes_enable(struct csiphy_device *csiphy,
@@ -138,7 +139,7 @@ static void csiphy_1_1_lanes_enable(struct csiphy_device *csiphy,
 		"csiphy%d v1.1: %d data lanes, mask 0x%02x, rate code 0x%x\n",
 		csiphy->id, lc->num_data, lane_mask, rate);
 
-	csiphy_1_1_reset(csiphy);
+	csiphy_1_1_hw_reset(csiphy);
 
 	/* data lanes: 0x000, then 0x200 / 0x400 */
 	for (i = 0; i < lc->num_data && i < CSIPHY_1_1_MAX_DATA_LANES; i++) {
@@ -205,7 +206,7 @@ const struct csiphy_hw_ops csiphy_ops_2ph_1_1 = {
 	.get_lane_mask = csiphy_1_1_get_lane_mask,
 	.hw_version_read = csiphy_1_1_hw_version_read,
 	.init = csiphy_1_1_init,
-	.reset = csiphy_1_1_reset,
+	.reset = csiphy_1_1_hw_reset,
 	.lanes_enable = csiphy_1_1_lanes_enable,
 	.lanes_disable = csiphy_1_1_lanes_disable,
 	.isr = csiphy_1_1_isr,

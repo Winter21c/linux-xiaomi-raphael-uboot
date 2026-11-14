@@ -5,20 +5,23 @@
  *
  * Recovered from the device's own vendor kernel
  *   boot partition -> UNCOMPRESSED_IMG -> arm64 Image -> vmlinux-to-elf
- * and decoded with the record layout proven from cam_csiphy_config_dev
- * (0x390ff88): 16 bytes, {offset, value, type, delay_ms}; field +8 is a 4-way
- * switch and field +12 is multiplied by 1000 and passed to usleep_range.
  *
- * Register map (all inside the 0x1000 window the device tree maps, so unlike
- * the Mi 9 PHY this part has no second page):
+ * Record layout, proven from cam_csiphy_config_dev (0x390ff88):
+ *   +0  u32 offset
+ *   +4  u32 value
+ *   +8  u32 delay_ms   (loaded with "ldr w8, [x, #8]", multiplied by 1000 and
+ *                       passed to usleep_range at 0xaca2b8 / 0xaca3ec)
+ *   +12 u32 type       (loaded with "ldr w10, [x, #12]", range-checked and used
+ *                       for a jump table at 0xaca250 / 0xaca360)
  *
- *   0x000..0x0ff   data lane 0
- *   0x200..0x2ff   data lane 1
- *   0x400..0x4ff   data lane 2
- *   0x700..0x7ff   clock lane          <- exactly the 0x80 bit of the enable mask
- *   0x800          reset/enable control
- *   0x814,0x818,0x81c  clock configuration
- *   0x82c..0x854   interrupt masks (11 registers)
+ * The reset table uses 7 type cases (unconditional write, write-if-flag,
+ * write-if-not-flag, ...), the lane tables use 4 (literal value, lane enable
+ * mask, rate low byte, rate high byte).
+ *
+ * Register map (all inside the 0x1000 window the device tree maps):
+ *   0x000 data lane 0, 0x200 data lane 1, 0x400 data lane 2,
+ *   0x700 clock lane, 0x800 reset/enable, 0x814/0x818/0x81c clock,
+ *   0x82c..0x854 interrupt masks.
  */
 #ifndef __CAMSS_CSIPHY_2PH_1_1_TABLES_H
 #define __CAMSS_CSIPHY_2PH_1_1_TABLES_H
@@ -28,8 +31,8 @@
 struct csiphy_reg_1_1 {
 	u32 offset;
 	u32 value;
-	u32 type;
 	u32 delay_ms;
+	u32 type;
 };
 
 /* csiphy_1_1_reset: reset sequence, @0x551306c */
@@ -50,7 +53,7 @@ static const struct csiphy_reg_1_1 csiphy_1_1_irq[] = {
 	{ 0x0800, 0x00000000, 0, 0 },
 };
 
-/* csiphy_1_1_2ph: per-rate registers 0x82c..0x854, @0x551310c */
+/* csiphy_1_1_2ph: 0x82c..0x854 interrupt masks, @0x551310c */
 static const struct csiphy_reg_1_1 csiphy_1_1_2ph[] = {
 	{ 0x082c, 0x000000ff, 0, 0 },
 	{ 0x0830, 0x000000ff, 0, 0 },
