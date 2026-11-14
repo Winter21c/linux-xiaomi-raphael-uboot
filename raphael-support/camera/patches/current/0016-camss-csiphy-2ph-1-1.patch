@@ -1,0 +1,35 @@
+Subject: [PATCH] camss: add the SM8150 2-phase CSIPHY v1.1 variant
+
+The SM8150 CSIPHY is a 2-phase v1.1 part: its control block sits at
+base+0x800 instead of base+0x140, its lane blocks are at 0x000/0x200/0x400
+(data) and 0x700 (clock) instead of 0x40*n, and it has its own reset, IRQ and
+lane-enable tables.  Recovered from the vendor kernel of the Redmi K20 Pro
+(see ../../drivers/csiphy_v1_1_tables.h and analysis/csiphy-v1-1-real.md).
+
+Files to add to the kernel tree:
+  drivers/media/platform/qcom/camss/camss-csiphy-2ph-1-1.c
+  drivers/media/platform/qcom/camss/camss-csiphy-2ph-1-1.h
+  drivers/media/platform/qcom/camss/csiphy_v1_1_tables.h
+
+diff --git a/drivers/media/platform/qcom/camss/Makefile b/drivers/media/platform/qcom/camss/Makefile
+--- a/drivers/media/platform/qcom/camss/Makefile
++++ b/drivers/media/platform/qcom/camss/Makefile
+@@
+ qcom-camss-objs += camss-csiphy-2ph-1-0.o
++qcom-camss-objs += camss-csiphy-2ph-1-1.o
+ qcom-camss-objs += camss-csiphy-3ph-1-0.o
+
+diff --git a/drivers/media/platform/qcom/camss/camss-csiphy.h b/drivers/media/platform/qcom/camss/camss-csiphy.h
+--- a/drivers/media/platform/qcom/camss/camss-csiphy.h
++++ b/drivers/media/platform/qcom/camss/camss-csiphy.h
+@@
+ extern const struct csiphy_hw_ops csiphy_ops_2ph_1_0;
++extern const struct csiphy_hw_ops csiphy_ops_2ph_1_1;
+ extern const struct csiphy_hw_ops csiphy_ops_3ph_1_0;
+
+diff --git a/drivers/media/platform/qcom/camss/camss.c b/drivers/media/platform/qcom/camss/camss.c
+--- a/drivers/media/platform/qcom/camss/camss.c
++++ b/drivers/media/platform/qcom/camss/camss.c
+@@ - csiphy_res_sm8150, all four entries @@
+-			.hw_ops = &csiphy_ops_2ph_1_0,
++			.hw_ops = &csiphy_ops_2ph_1_1,
