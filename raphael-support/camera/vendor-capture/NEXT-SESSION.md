@@ -1,54 +1,66 @@
-# Next mainline session: what to do with the MIUI evidence
+# Next mainline session - run these in order
 
-Everything below is ready; none of it has been tested on mainline yet.
+The v1.1 CSIPHY work is finished offline; everything below is ready to apply.
+Nothing here has been compiled or run yet.
 
-## 1. Test the per-lane enable bit (highest value, one change)
+## 1. Switch the CSIPHY driver to the v1.1 variant
 
-`camss-csiphy-2ph-1-0.c.vendor-global` now calls `csiphy_lane_selection()` right
-after the vendor table replay.  It performs what the stock driver's
-`cam_csiphy_update_lane_selection()` does:
+Copy three files into the kernel tree:
 
-```c
-writel(readl(lane + 0x04) | 0xf, lane + 0x04);
-writel(readl(lane + 0x14) | 0x10, lane + 0x14);   /* per-lane output enable */
+```
+drivers/media/platform/qcom/camss/camss-csiphy-2ph-1-1.c
+drivers/media/platform/qcom/camss/camss-csiphy-2ph-1-1.h
+drivers/media/platform/qcom/camss/csiphy_v1_1_tables.h
 ```
 
-Build it, load qcom-camss, run the usual 2x tele pipeline and watch for
-`msm_csid0` SOF / non-zero bytes.
+then apply `../../patches/current/0016-camss-csiphy-2ph-1-1.patch`, which only
+adds the object to the Makefile, declares the ops in camss-csiphy.h and switches
+the four `csiphy_res_sm8150[]` entries from `csiphy_ops_2ph_1_0` to
+`csiphy_ops_2ph_1_1`.
 
-Success criteria: `bytes > 0` on /dev/video2, or at least `msm_csid0` interrupt
-count rising.
+Build, load, and run the usual 1640x1232 pipeline on the tele:
 
-If it fails, the next thing to try is the same bit on **all four** lane blocks
-(the vendor loops over the configured lane count; worth trying 0..3 regardless).
+```
+modprobe i2c-qcom-cci
+modprobe qcom-camss
+insmod /root/ovcomb/ov8856.ko
+/tmp/mcam /dev/v4l-subdev2 fmt 0 1640 1232 0x300a     # csiphy2
+...
+```
 
-## 2. Add the pop-up motor
+Success: `bytes > 0` on /dev/video2, or at least `msm_csid0` interrupts rising.
 
-`driver/raphael-popup-motor.c` + the DT node in `../motor/README.md`.
-Needs the LPG PWM node (`qcom,pwm-lpg@bc00`, 2 channels) wired as
-`pwms = <&pm8150l_lpg 1 1000000 0>`.  Then
-`echo 1 > /sys/class/.../position` should extend the camera.
+## 2. If it still receives nothing
 
-Watch it the first time - the DIR polarity assumption (1 = extend) may need
-flipping, and the vendor's `step-mode = 2` combination may differ from the
-M0=1/M1=0 the driver uses.
+Dump these four registers right after `lanes_enable` and compare with the table:
 
-## 3. Fill the two wiring gaps
+```
+0x82c  should read 0xff   (first IRQ mask)
+0x800  should read 0x00   (reset released)
+0x000  should read 0x90   (data lane 0 block, last write)
+0x700  should read 0x80   (clock lane block)
+```
 
-* **CCI controller 1** at `0xac4b000` - the ultrawide is the only camera on it, so
-  without it that camera is unreachable.  Straightforward: add the node like
-  `cci@ac4a000` with its own clocks/GDSC and a second `i2c-bus@0`.
-* per-camera **vdig enable GPIOs**: 90 (wide), 93 (tele), 95 (front), 34
-  (ultrawide) - modelled as `regulator-fixed` with `gpio` + `enable-active-high`,
-  exactly like the existing tele one.
+If they match, the PHY is programmed exactly as the vendor programs it and the
+remaining difference is outside the PHY (CSID input select or the sensor itself).
+If they do not match, something overwrote them - which would point at the order of
+`reset()` (called at power-on) versus `lanes_enable()`.
 
-## 4. What is no longer worth investigating
+## 3. Motor (independent of the camera)
 
-* routing: the stock kernel proves tele = csiphy2 -> csid0 -> ife0;
-* clocks: MCLK 19.2 MHz, csiphy 400 MHz, csi2phytimer 300 MHz, cphy_rx 400 MHz,
-  ife0_csid 400 MHz - all identical to our resource tables;
-* supplies: bob / s8 / viodd / l17 (and s5 for the wide) - also identical;
-* lane count: the stock DT leaves lanes to the HAL, and the module is 2-lane.
+Add `../dtb/raphael-camera-v11-additions.dtsi` (the pwms@bc00 node and the
+popup-motor node), rebuild the dtb, then build
+`../../motor/driver/raphael-popup-motor.c`.
 
-So after the lane-enable bit the remaining suspects are only inside the CSIPHY
-global page writes, which we already replay verbatim from the vendor tables.
+`echo 1 > /sys/.../position` should extend the camera.  Watch it the first time;
+the DIR polarity and the M0/M1 combination are the two assumptions.
+
+## 4. What is still unknown (documented, not guessed)
+
+* `csiphy_common_reg_1_1` decode - the values do not look like write pairs, so it
+  is not used anywhere;
+* which record carries the lane enable mask - the driver passes the mask to every
+  type-1 record and there are none in the four blocks we have, so the mask is
+  currently only used for the block base writes;
+* `csiphy->field_508` semantics in the vendor reset-table switch (the driver treats
+  every record as unconditional).
