@@ -115,10 +115,18 @@ static void csiphy_1_1_write_rec(struct csiphy_device *csiphy,
 	u32 val;
 
 	switch (r->type) {
+	case 0:  val = r->value; break;
 	case 1:  val = lane_mask; break;
 	case 2:  val = rate & 0xff; break;
 	case 3:  val = (rate >> 8) & 0xff; break;
-	default: val = r->value; break;
+	default:
+		/* the lane-table switch only has four cases; the vendor logs and
+		 * skips anything above 3 (0xaca360 "cmp w10,#3 / b.hi"), so do
+		 * the same rather than writing an unclassified value */
+		dev_dbg(csiphy->camss->dev,
+			"csiphy%d: skip lane record 0x%04x type %u\n",
+			csiphy->id, r->offset, r->type);
+		return;
 	}
 
 	writel_relaxed(val, csiphy->base + r->offset);

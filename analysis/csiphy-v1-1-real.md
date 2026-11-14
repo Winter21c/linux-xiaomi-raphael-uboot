@@ -72,6 +72,11 @@ field at **+12** is the one that is compared and switched on, and at 0xaca2b8 an
 | 1 | the computed **lane enable mask** |
 | 2 | low byte of the rate field |
 | 3 | second byte of the rate field |
+| 4..6 | only meaningful in the reset table; the lane-table switch has just four
+        cases and the vendor logs and **skips** anything above 3 (0xaca360) |
+
+Two of the fourteen records in each lane block carry type 4 (`0x028` and
+`0x00c`), so the vendor really does skip them - the driver does the same now.
 
 and for the reset table, type 0/1 select whether the record is written
 unconditionally or only when `csiphy->field_508` is zero/non-zero.
