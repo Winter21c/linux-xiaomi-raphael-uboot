@@ -227,6 +227,16 @@ MODULE_PARM_DESC(camss_phy_global, "program the CSIPHY global block");
 
 /* Limit which rate-table offsets are written: accessing a gated lane block raises
  * an external abort, so keep this below the first unexpected block by default. */
+/* The vendor's lane-selection step sets one bit in a per-lane register.  The
+ * disassembly proves the step exists and that the bit is 0x10, but the register
+ * offset is inferred from the hw_info layout, so both are knobs. */
+static int camss_lane_en_off = 0x14;
+module_param(camss_lane_en_off, int, 0644);
+MODULE_PARM_DESC(camss_lane_en_off, "per-lane register that receives the enable bit");
+static int camss_lane_en_bit = 0x10;
+module_param(camss_lane_en_bit, int, 0644);
+MODULE_PARM_DESC(camss_lane_en_bit, "bit set in that register (0 disables the step)");
+
 static int camss_phy_rate_limit = 0x400;
 module_param(camss_phy_rate_limit, int, 0644);
 MODULE_PARM_DESC(camss_phy_rate_limit, "skip rate-table records at or above this offset");
@@ -271,19 +281,24 @@ static void csiphy_lane_selection(struct csiphy_device *csiphy, unsigned int nla
 		void __iomem *lane = csiphy->base + 0x400 * i;
 		u32 v;
 
-		if (enable) {
+		if (enable && camss_lane_en_bit) {
 			v = readl_relaxed(lane + 0x004);
 			writel_relaxed(v | 0xf, lane + 0x004);
 
-			v = readl_relaxed(lane + 0x014);
-			writel_relaxed(v | 0x10, lane + 0x014);
-			dev_dbg(csiphy->camss->dev,
-				"lane%u en: 0x04=0x%08x 0x14=0x%08x\n", i,
-				readl_relaxed(lane + 0x004),
-				readl_relaxed(lane + 0x014));
+			v = readl_relaxed(lane + camss_lane_en_off);
+			writel_relaxed(v | camss_lane_en_bit,
+				       lane + camss_lane_en_off);
+			dev_info(csiphy->camss->dev,
+				 "lane%u en: 0x04=0x%08x 0x%02x=0x%08x\n", i,
+				 readl_relaxed(lane + 0x004), camss_lane_en_off,
+				 readl_relaxed(lane + camss_lane_en_off));
+		} else if (enable) {
+			v = readl_relaxed(lane + 0x004);
+			writel_relaxed(v | 0xf, lane + 0x004);
 		} else {
-			v = readl_relaxed(lane + 0x014);
-			writel_relaxed(v & ~0x10, lane + 0x014);
+			v = readl_relaxed(lane + camss_lane_en_off);
+			writel_relaxed(v & ~camss_lane_en_bit,
+				       lane + camss_lane_en_off);
 		}
 	}
 }
