@@ -128,18 +128,32 @@ static void csiphy_1_1_write_rec(struct csiphy_device *csiphy,
 }
 
 /*
- * csiphy_1_1_reset - the vendor reset table, inlined because ->reset() runs at
- * power-on where csiphy->cfg.csi2 does not exist yet:
- *   0x814 = 0xd5, 0x818 = 1, 0x81c = 2, 0x800 = 1, 1 ms, 0x800 = 0
+ * Raw replay, no type dispatch.  The vendor uses this shape in
+ * cam_csiphy_reset (0x390f888), which walks the IRQ table with a plain
+ * {offset, value, delay} loop and runs before csiphy->cfg.csi2 exists.
+ */
+static void csiphy_1_1_write_raw(struct csiphy_device *csiphy,
+				 const struct csiphy_reg_1_1 *tbl, int n)
+{
+	int i;
+
+	for (i = 0; i < n; i++) {
+		writel_relaxed(tbl[i].value, csiphy->base + tbl[i].offset);
+		if (tbl[i].delay_ms)
+			usleep_range(tbl[i].delay_ms * 1000,
+				     tbl[i].delay_ms * 1000 + 10);
+	}
+}
+
+/*
+ * csiphy_1_1_hw_reset - power-on.  The vendor's ->reset() replays the *IRQ*
+ * table (res + 88, i.e. csiphy_irq_reg_1_1), not the reset table:
+ *   0x814 = 0, 0x818 = 0, 0x81c = 0, 0x800 = 1, 1 ms, 0x800 = 0
  */
 static void csiphy_1_1_hw_reset(struct csiphy_device *csiphy)
 {
-	writel_relaxed(0xd5, csiphy->base + 0x814);
-	writel_relaxed(0x01, csiphy->base + 0x818);
-	writel_relaxed(0x02, csiphy->base + 0x81c);
-	writel_relaxed(0x01, csiphy->base + 0x800);
-	usleep_range(1000, 1010);
-	writel_relaxed(0x00, csiphy->base + 0x800);
+	csiphy_1_1_write_raw(csiphy, csiphy_1_1_irq,
+			     ARRAY_SIZE(csiphy_1_1_irq));
 }
 
 static void csiphy_1_1_lanes_enable(struct csiphy_device *csiphy,
@@ -154,7 +168,9 @@ static void csiphy_1_1_lanes_enable(struct csiphy_device *csiphy,
 		"csiphy%d v1.1: %d data lanes, mask 0x%02x, rate code 0x%x\n",
 		csiphy->id, lc->num_data, lane_mask, rate);
 
-	csiphy_1_1_hw_reset(csiphy);
+	/* config path: the reset table (0xd5 / 1 / 2 / 1 / 0), not the IRQ one */
+	csiphy_1_1_write_raw(csiphy, csiphy_1_1_reset,
+			     ARRAY_SIZE(csiphy_1_1_reset));
 
 	/* data lanes: 0x000, then 0x200 / 0x400 */
 	for (i = 0; i < lc->num_data && i < CSIPHY_1_1_MAX_DATA_LANES; i++) {

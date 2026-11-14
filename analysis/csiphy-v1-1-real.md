@@ -76,15 +76,41 @@ field at **+12** is the one that is compared and switched on, and at 0xaca2b8 an
 and for the reset table, type 0/1 select whether the record is written
 unconditionally or only when `csiphy->field_508` is zero/non-zero.
 
-## Reset sequence (proven)
+## Two different tables, two different moments (proven, corrected in round 62)
+
+The vendor keeps a *reset* table and an *IRQ* table, and they are used in
+different places.  Which one is which was resolved from `cam_csiphy_parse_dt_info`
+(file offset 0xac8e98, the v1.1 branch):
 
 ```
-0x814 = 0xd5
-0x818 = 0x01
-0x81c = 0x02
-0x800 = 0x01  (delay 1 ms)
-0x800 = 0x00  (delay 1 ms)
+res + 72 = csiphy_reset_reg_1_1   written by cam_csiphy_config_dev (7-way switch)
+res + 80 = csiphy_2ph_v1_1_reg    written by cam_csiphy_cphy_data_rate_config
+res + 88 = csiphy_irq_reg_1_1     written by cam_csiphy_reset (power-on, no switch)
 ```
+
+`cam_csiphy_reset` (0x390f888) is a plain loop:
+
+```c
+count = res[32];
+for (i = 0; i < count; i++)
+        cam_io_w(res[88][i].value, base + res[88][i].offset);
+        usleep_range(res[88][i].delay_ms * 1000, ...);
+```
+
+so **at power-on the IRQ table is replayed**:
+
+```
+0x814 = 0x00, 0x818 = 0x00, 0x81c = 0x00, 0x800 = 0x01, 1 ms, 0x800 = 0x00
+```
+
+and **at configuration time the reset table is replayed**:
+
+```
+0x814 = 0xd5, 0x818 = 0x01, 0x81c = 0x02, 0x800 = 0x01, 1 ms, 0x800 = 0x00
+```
+
+An earlier version of this document called the 0xd5 sequence "the reset sequence"
+and the driver used it in both places; that is corrected now.
 
 ## Interrupt masks (proven, 11 records)
 
