@@ -135,3 +135,22 @@ The single untested change is the per-lane enable bit (`0x14 |= 0x10`) plus the
 `0x04` lane-mask OR, both implemented in
 `../../drivers/camss-csiphy-2ph-1-0.c.vendor-global`.  Everything else - routing,
 clocks, MCLK, supplies, lane count - now has vendor evidence saying it is right.
+
+## 9. Where the vendor keeps the sensor register tables (for the next round)
+
+The stock ROM ships, under `/vendor/lib64/camera/`:
+
+```
+com.qti.sensor.<sensor>_raphael.so            11 KB  - API/thresholds only
+com.qti.sensormodule.raphael_<vendor>_<sensor>.bin  ~112 KB - "cameraModuleData"
+```
+
+The `.bin` is the Qualcomm `cameraModuleData` container (header "QTI Chromatix
+Header", parser "Parameter Parser V1.3.1").  It carries `sensorDriverData`,
+`sensorSlaveAddress`, `laneAssign`, `isComboMode`, `resolution` and the tuning
+reference, but the actual register arrays are **not** plainly packed as u16 pairs -
+scanning for `0x0103`/`0x0100` pairs only hits text.  Extracting the tables needs
+the container format decoded, which is a separate job.
+
+`data/com.qti.sensormodule.raphael_ofilm_ov8856.bin` is the pulled copy (the tele
+module ships in two variants, `ofilm` and `luxvisions`).
