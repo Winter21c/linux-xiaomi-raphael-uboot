@@ -1,0 +1,106 @@
+/*
+ * Nodes that still have to be added to the raphael device tree.
+ * All values come from the live vendor device tree dumped off the phone
+ * (raphael-support/camera/vendor-capture/data/vendor-fdt.dts).
+ */
+
+/* ---------------------------------------------------------------- motors -- */
+/*
+ * Vendor node (ti,drv8846): STEP comes from the pm8150l LPG block channel 1,
+ * DIR = tlmm 9, M0 = 21, M1 = 33, nSLEEP = 35, supply enable = 130, and the
+ * profile is 50 ms of 1.6 kHz ramp, 720 ms of 19.2 kHz cruise, 50 ms ramp down.
+ *
+ * The LPG node below is missing from our tree today; the flash LEDs use a
+ * different LPG instance (leds@d800), so this one is free.
+ */
+&pm8150l {
+	pm8150l_lpg: pwms@bc00 {
+		compatible = "qcom,pwm-lpg";
+		reg = <0xbc00 0x200>;
+		reg-names = "lpg-base";
+		#pwm-cells = <2>;
+		qcom,num-lpg-channels = <2>;
+		status = "ok";
+	};
+};
+
+popup_motor: popup-motor {
+	compatible = "xiaomi,raphael-popup-motor";
+	pwms = <&pm8150l_lpg 1 1000000 0>;
+
+	mode0-gpios  = <&tlmm 21 0>;
+	mode1-gpios  = <&tlmm 33 0>;
+	sleep-gpios  = <&tlmm 35 0>;
+	dir-gpios    = <&tlmm 9  0>;
+	pwren-gpios  = <&tlmm 130 0>;
+
+	/* vendor timings */
+	high-period-ns = <52083>;
+	high-duration-ms = <720>;
+	ramp-period-ns = <625000>;
+	ramp-duration-ms = <50>;
+
+	pinctrl-names = "default";
+	status = "ok";
+};
+
+/* ------------------------------------------------------- camera supplies -- */
+/*
+ * Per-camera vdig enable GPIOs from the vendor tree.  The tele one (93) already
+ * exists as a fixed regulator; the other three are added here.
+ */
+cam_vdig_wide: regulator-cam-vdig-wide {
+	compatible = "regulator-fixed";
+	regulator-name = "cam_vdig_wide";
+	regulator-min-microvolt = <1352000>;
+	regulator-max-microvolt = <1352000>;
+	gpio = <&tlmm 90 0>;
+	enable-active-high;
+};
+
+cam_vdig_front: regulator-cam-vdig-front {
+	compatible = "regulator-fixed";
+	regulator-name = "cam_vdig_front";
+	regulator-min-microvolt = <1352000>;
+	regulator-max-microvolt = <1352000>;
+	gpio = <&tlmm 95 0>;
+	enable-active-high;
+};
+
+cam_vdig_uw: regulator-cam-vdig-uw {
+	compatible = "regulator-fixed";
+	regulator-name = "cam_vdig_uw";
+	regulator-min-microvolt = <1352000>;
+	regulator-max-microvolt = <1352000>;
+	gpio = <&tlmm 34 0>;
+	enable-active-high;
+};
+
+/* ---------------------------------------------------- CCI1 master 0 (UW) -- */
+/*
+ * Correction: the camss CCI node in our DTB already instantiates BOTH
+ * controllers - reg-names "cci0"/"cci1"/"cci_top", interrupts 460 and 271,
+ * clocks "cci0" and "cci1".  What is missing is only the sub-bus for CCI
+ * controller 1, which is where the ultrawide lives (vendor: cci-device = <1>,
+ * cci-master = <0>, sensor at i2c 0x10, csiphy3).
+ *
+ * In mainline's i2c-qcom-cci the bus index maps as controller = reg / 2 and
+ * master = reg % 2, so CCI1 master 0 is i2c-bus@2.
+ */
+&cci {
+	i2c-bus@2 {
+		reg = <2>;
+		#address-cells = <1>;
+		#size-cells = <0>;
+		clock-frequency = <400000>;
+		status = "okay";
+
+		/* S5K3L6 ultrawide placeholder: address from the vendor tree */
+		/*
+		camera_uw: camera@10 {
+			reg = <0x10>;
+			...
+		};
+		*/
+	};
+};

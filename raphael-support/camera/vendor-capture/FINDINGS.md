@@ -110,10 +110,15 @@ cam_v_custom1 = pm8150_l17      3096000 uV
 cam_v_custom2 = pm8150_s5       1904000 uV   (wide only)
 ```
 
+Correction (verified later against our own DTB): the camss CCI node **does**
+already include both controllers (`reg-names = "cci0", "cci1", "cci_top"`,
+interrupts 460 and 271, clocks "cci0" and "cci1").  What is missing is only the
+**sub-bus** for controller 1 - `i2c-bus@2` in i2c-qcom-cci terms - which is where
+the ultrawide sits (cci-device 1, cci-master 0, i2c 0x10, csiphy3).
+
 Two things mainline does not have today:
 
-1. **CCI controller 1 (`cci@ac4b000`)** - the ultrawide is on CCI device 1; our DT
-   only instantiates CCI0, so the ultrawide can never be reached.
+1. that CCI1 sub-bus (`i2c-bus@2`);
 2. the per-camera `vdig` enable GPIOs (90 / 93 / 95 / 34) - mainline only has the
    tele one (93) as a fixed regulator.
 
