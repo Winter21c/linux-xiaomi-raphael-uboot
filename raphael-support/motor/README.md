@@ -1,68 +1,76 @@
 # Front pop-up camera motor
 
-## Pins (from the shipped DTB's `gpio-line-names` + `motor_gpio_default` pinctrl)
+## The mechanism (finally known, captured from the stock MIUI device tree)
 
-| TLMM gpio | name | use |
-|---|---|---|
-| 9 | MOTOR_DIR | direction |
-| 21 | MOTOR_M0 | H-bridge input 0 |
-| 33 | MOTOR_M1 | H-bridge input 1 |
-| 35 | MOTOR_SLEEP | driver nSLEEP |
-| 36 | MOTOR_FAULT | driver nFAULT (**input**, high = ok) |
-| 130 | MOTOR_EN | motor enable |
-| 27 | DIGITAL_HALL1_INT | hall feedback (**input**) |
-| 11 | DIGITAL_HALL1_RSTN | hall reset |
-
-## How the pins are exposed
-
-Neither `/sys/class/gpio` nor the chardev uAPI works in this kernel build (both
-line-request ioctls return EINVAL), so the five outputs are exposed through a
-`gpio-leds` node added to the DTB:
+The carriage is a **stepper motor driven by a TI DRV8846**. The stock device tree
+node (`/sys/firmware/fdt`, saved as
+`../camera/vendor-capture/data/vendor-fdt.dts`, search for `ti,drv8846`) is:
 
 ```
-/sys/class/leds/motor:{en,sleep,dir,m0,m1}/brightness
+ti,drv8846@0 {
+        compatible = "ti,drv8846";
+        pwms = <&pm8150l_lpg 1 1000000>;     /* LPG channel 1 = STEP */
+        motor,gpio-mode0 = <&tlmm 21 0>;
+        motor,gpio-mode1 = <&tlmm 33 0>;
+        motor,gpio-sleep = <&tlmm 35 0>;
+        motor,gpio-dir   = <&tlmm 9  0>;
+        motor,gpio-pwren = <&tlmm 130 0>;
+        motor,rampup-pwm-period-ns  = <625000>;   /* 1.6 kHz ramp */
+        motor,rampup-duration-ms    = <50>;
+        motor,high-pwm-period-ns    = <52083>;    /* 19.2 kHz cruise */
+        motor,high-duration-ms      = <720>;      /* full travel */
+        motor,rampdown-pwm-period-ns = <625000>;
+        motor,rampdown-duration-ms   = <50>;
+        motor,step-mode = <2>;
+};
 ```
 
-The node was added to the working DTB source and the resulting blob is
-`raphael-with-motor.dtb` (installed as `/boot/dtbs/qcom/sm8150-xiaomi-raphael.dtb`).
-Display and modem were re-verified after booting it (`drm=5`, `modem=running`).
+The PWM comes from `qcom,pwm-lpg@bc00` (the PM8150L LPG block), channel 1 - the
+same block that mainline drives with `leds-qcom-lpg`.
 
-## Drive sequence that works at the pin level
+### Why the earlier GPIO-only attempt could not work
 
+DRV8846 is a **stepper** driver: DIR selects direction and M0/M1 select the
+microstep mode, but the motor only turns while **STEP pulses** arrive on the PWM
+input.  Ramp-up/cruise/ramp-down give the speed profile.  Driving the GPIOs
+statically (as we did) leaves the coil energised but the rotor stationary, which
+is exactly what we observed (nFAULT stayed high, hall never changed).
+
+Measured on MIUI: the five motor GPIOs are claimed and driven as **outputs**
+(mainline leaves them as unclaimed inputs), and switching to the front camera
+activates `csiphy1`, so the mechanism does work there.
+
+## Driver
+
+`driver/raphael-popup-motor.c` implements it for mainline:
+
+* `devm_pwm_get()` for STEP, `devm_gpiod_get()` for the five control pins,
+* the vendor timing as defaults, overridable from DT,
+* `position` sysfs attribute: `echo 1 > position` extends, `echo 0` retracts.
+
+Device tree node to add:
+
+```dts
+popup_motor: popup-motor {
+        compatible = "xiaomi,raphael-popup-motor";
+        pwms = <&pm8150l_lpg 1 1000000 0>;
+        mode0-gpios = <&tlmm 21 0>;
+        mode1-gpios = <&tlmm 33 0>;
+        sleep-gpios = <&tlmm 35 0>;
+        dir-gpios   = <&tlmm 9  0>;
+        pwren-gpios = <&tlmm 130 0>;
+};
 ```
-en=1, sleep=1            # wake the H-bridge
-dir=<0|1>, m0=1, m1=0    # or m0=0, m1=1
-sleep <duration>
-m0=0, m1=0               # stop
-sleep=0, en=0
-```
 
-Verified with `/sys/kernel/debug/gpio`: `en`, `sleep`, `dir`, `m0`, `m1` all follow
-the writes and `MOTOR_FAULT` stays high (no fault reported).
+(`pm8150l_lpg` must be the LPG node mainline already uses for the flash LEDs; if
+the flash node consumes all channels, check `qcom,num-lpg-channels` for that
+PMIC - the stock DTB says 2 channels.)
 
-## Open question
+## Open items
 
-`DIGITAL_HALL1_INT` stays **low** through every polarity combination tried
-(0.3 s .. 2 s, four dir/M0/M1 permutations), so either the motor is not actually
-turning, the hall is not a position sensor, or the module needs a supply that is not
-`MOTOR_EN`.  This needs a visual check of the phone while driving the motor.
-
-## Additional experiments (rounds 49)
-
-Two more controls were added to the DTB and exercised:
-
-* `motor:hall_rst` (gpio11, `DIGITAL_HALL1_RSTN`) - releasing the hall reset does not
-  change the hall input;
-* `motor:camf_ldo` (gpio95, `CAMF_LDO_EN`) - enabling the front-camera LDO (which
-  plausibly powers the motor and the hall) before driving still leaves the hall low.
-
-The full sequence (LDO on, enable, sleep release, hall reset release, both drive
-polarities, four 250 ms samples each) produced `hall=low` throughout while
-`MOTOR_FAULT` stayed high.  Display and modem remained healthy (`drm=5`,
-`modem=running`).
-
-So either the hall is not a position sensor for this mechanism, its output needs a
-pull-up that mainline does not configure (the vendor `motor_gpio_default` pin
-configuration uses `bias-pull-up` while mainline leaves these pins pulled down), or
-the motor really does not move because of a supply we have not found.  This needs a
-human watching the phone while the sequence runs.
+* confirm the DIR polarity for "extend" vs "retract" on hardware (the driver
+  assumes 1 = extend and can be flipped trivially);
+* the vendor also drives a hall sensor (tlmm 27) for position feedback - not used
+  by this driver yet;
+* `motor,step-mode = <2>` selects a specific M0/M1 combination; the driver uses
+  M0=1, M1=0 and may need adjusting to match.
