@@ -145,3 +145,28 @@ was added (`reg_4800` in the OV8856 driver) but the override did not take effect
 the build used, so the values 0x44/0x24/0x04/0x64 are untested.  To redo it, write
 0x4800 **after** the mode register list is committed and **before** `0x0100 <- 0x01`,
 then re-read the PHY status registers.
+
+## Round 63: the v1.1 reverse engineering is complete
+
+Everything the CSIPHY v1.1 path does is now accounted for, from the phone's own
+kernel:
+
+| item | evidence |
+|---|---|
+| register map | data lanes 0x000/0x200/0x400, clock 0x700, control 0x800, IRQ masks 0x82c..0x854 |
+| record format | {offset, value, delay_ms, type}; type at +12, delay at +8 |
+| power-on | `cam_csiphy_reset` replays the IRQ table raw: 0x814/0x818/0x81c = 0, 0x800 1 -> 0 |
+| configuration | `cam_csiphy_config_dev` replays the reset table: 0xd5 / 1 / 2 / 1 -> 0, then the lane blocks, then the 11 IRQ masks |
+| lane blocks | four blocks, base 0x000 / 0x200 / 0x400 / 0x700, 14 records each |
+| enable mask | clock lane -> bit 7, data lanes -> bits 0..3 |
+| `res` layout | +28 reset count, +32 IRQ count, +72 reset, +80 2ph, +88 IRQ, +96 combo, +104/112 3ph, +120 hw_info |
+| dead code | `csiphy_common_reg_1_1` is never assigned to any field |
+| field_508 | only picks between the two conditional reset-table cases; 0 for a normal D-PHY, so the 0xd5 record is written |
+
+Deliverables: `drivers/camss-csiphy-2ph-1-1.c` (compiles clean against stub headers
+that mirror this tree's real declarations), `csiphy_v1_1_tables.h` (77 records),
+patch 0016, the DTB additions, the motor driver, and `v11-build-test.sh` which runs
+the whole apply-build-load-test cycle on the device.
+
+Not done, and cannot be done offline: compiling inside the kernel tree and running it
+on the hardware.
