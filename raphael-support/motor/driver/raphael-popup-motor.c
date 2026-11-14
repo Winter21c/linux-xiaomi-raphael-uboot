@@ -17,6 +17,7 @@
  */
 
 #include <linux/module.h>
+#include <linux/device.h>
 #include <linux/platform_device.h>
 #include <linux/of.h>
 #include <linux/gpio/consumer.h>
@@ -24,7 +25,7 @@
 #include <linux/delay.h>
 #include <linux/mutex.h>
 #include <linux/sysfs.h>
-#include <linux/device/class.h>
+
 
 struct popup_motor {
 	struct device *dev;
