@@ -34,6 +34,8 @@
 #include <linux/delay.h>
 #include <linux/io.h>
 #include <linux/math64.h>
+#include <linux/module.h>
+#include <linux/moduleparam.h>
 
 #include "camss-csiphy.h"
 #include "camss-csiphy-2ph-1-1.h"
@@ -84,8 +86,21 @@ static u8 csiphy_1_1_get_lane_mask(struct csiphy_lanes_cfg *lane_cfg)
 	return out;
 }
 
+/*
+ * The vendor works in Mbit/s divided by 88: its own table carries 0x0e = 14 for
+ * the data lanes, and 14 * 88 = 1232, the OV8856 8 MP two-lane link rate.
+ * Our modes are slower, so the computed code will differ from the vendor's
+ * table value; the knob lets a test force the vendor value if that turns out to
+ * matter.
+ */
+static int camss_phy_rate_code = -1;
+module_param(camss_phy_rate_code, int, 0644);
+MODULE_PARM_DESC(camss_phy_rate_code, "override the type-2 register value (-1 = derive from link_freq)");
+
 static u32 csiphy_1_1_rate_code(s64 link_freq)
 {
+	if (camss_phy_rate_code >= 0)
+		return camss_phy_rate_code;
 	if (link_freq <= 0)
 		return 0;
 
