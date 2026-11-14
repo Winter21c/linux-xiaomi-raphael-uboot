@@ -139,7 +139,6 @@ static void csiphy_1_1_lanes_enable(struct csiphy_device *csiphy,
 		csiphy->id, lc->num_data, lane_mask, rate);
 
 	csiphy_1_1_reset(csiphy);
-	writel_relaxed(0x01, csiphy->base + 0x800);
 
 	/* data lanes: 0x000, then 0x200 / 0x400 */
 	for (i = 0; i < lc->num_data && i < CSIPHY_1_1_MAX_DATA_LANES; i++) {
@@ -160,8 +159,6 @@ static void csiphy_1_1_lanes_enable(struct csiphy_device *csiphy,
 	for (i = 0; i < ARRAY_SIZE(csiphy_1_1_2ph); i++)
 		csiphy_1_1_write_rec(csiphy, &csiphy_1_1_2ph[i],
 				     lane_mask, rate);
-
-	writel_relaxed(0x01, csiphy->base + 0x800);
 }
 
 static void csiphy_1_1_lanes_disable(struct csiphy_device *csiphy,
