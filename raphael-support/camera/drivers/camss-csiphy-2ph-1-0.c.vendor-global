@@ -250,6 +250,44 @@ MODULE_PARM_DESC(camss_seq_lane14, "override the per-lane 0x14 settle value");
  * registers.  mainline only maps the DT window (0x1000) and never touches this
  * block, which is why the PHY output was never enabled.
  */
+/*
+ * The vendor driver, after replaying the static tables, runs
+ * cam_csiphy_update_lane_selection(), which for every enabled lane does
+ *
+ *     val = readl(lane_base + 0x14);
+ *     val |= 0x10;                 // lane enable
+ *     writel(val, lane_base + 0x14);
+ *
+ * (and ORs the lane mask into the per-lane mask register at 0x04).  mainline
+ * never sets that bit, which leaves the lane outputs disabled even though every
+ * other register matches.
+ */
+static void csiphy_lane_selection(struct csiphy_device *csiphy, unsigned int nlanes,
+				  bool enable)
+{
+	unsigned int i;
+
+	for (i = 0; i < nlanes + 1; i++) {
+		void __iomem *lane = csiphy->base + 0x400 * i;
+		u32 v;
+
+		if (enable) {
+			v = readl_relaxed(lane + 0x004);
+			writel_relaxed(v | 0xf, lane + 0x004);
+
+			v = readl_relaxed(lane + 0x014);
+			writel_relaxed(v | 0x10, lane + 0x014);
+			dev_dbg(csiphy->camss->dev,
+				"lane%u en: 0x04=0x%08x 0x14=0x%08x\n", i,
+				readl_relaxed(lane + 0x004),
+				readl_relaxed(lane + 0x014));
+		} else {
+			v = readl_relaxed(lane + 0x014);
+			writel_relaxed(v & ~0x10, lane + 0x014);
+		}
+	}
+}
+
 static void csiphy_program_global(struct csiphy_device *csiphy)
 {
 	void __iomem *g = csiphy->base_global;
@@ -415,6 +453,10 @@ static void csiphy_lanes_enable(struct csiphy_device *csiphy,
 
 	/* SM8150: replay the vendor D-PHY v1.1 sequence last so it wins */
 	csiphy_apply_vendor_seq(csiphy);
+
+	/* vendor: lane selection runs after the static tables */
+	csiphy_lane_selection(csiphy, csiphy->num_data_lanes,
+			      csiphy->num_data_lanes > 0);
 
 	if (camss_phy_global)
 		csiphy_program_global(csiphy);

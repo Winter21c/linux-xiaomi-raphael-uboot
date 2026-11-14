@@ -1,0 +1,124 @@
+[12944.692048] CAM_INFO: CAM-CRM: cam_req_mgr_process_flush_req: 1954 Last request id to flush is 574
+[12944.692061] CAM_INFO: CAM-ISP: __cam_isp_ctx_flush_req_in_top_state: 2509 ctx id:4 Last request id to flush is 574
+[12944.692973] FG: soc_work_fn: adjust_soc: s 100 r 8056 i 0 v 4352 t 242 cc 0 m 0xfd
+[12944.737074] CAM_INFO: CAM-CRM: cam_req_mgr_process_flush_req: 1954 Last request id to flush is 574
+[12944.737081] CAM_INFO: CAM-ISP: __cam_isp_ctx_flush_req_in_top_state: 2509 ctx id:4 Last request id to flush is 574
+[12944.738242] CAM_INFO: CAM-CRM: cam_req_mgr_process_flush_req: 1954 Last request id to flush is 574
+[12944.738248] CAM_INFO: CAM-ISP: __cam_isp_ctx_flush_req_in_top_state: 2509 ctx id:4 Last request id to flush is 574
+[12944.751209] CAM_INFO: CAM-SENSOR: cam_sensor_driver_cmd: 938 CAM_STOP_DEV Success, sensor_id:0x586,sensor_slave_addr:0x34
+[12944.757814] CAM_INFO: CAM-CORE: cam_node_handle_ioctl: 863 Release HW done(rc = 0)
+[12944.814021] CAM_INFO: CAM-SENSOR: cam_sensor_driver_cmd: 868 CAM_RELEASE_DEV Success, sensor_id:0x30c6,sensor_slave_addr:0x20
+[12944.875407] CAM_INFO: CAM-SENSOR: msm_cam_sensor_handle_reg_gpio: 1466 Input Parameters are not proper
+[12944.877434] CAM_INFO: CAM-SENSOR: cam_sensor_util_request_gpio_table: 792 No GPIO data
+[12944.908946] CAM_INFO: CAM-SENSOR: cam_sensor_driver_cmd: 868 CAM_RELEASE_DEV Success, sensor_id:0x885a,sensor_slave_addr:0x6c
+[12944.992744] CAM_INFO: CAM-SENSOR: msm_cam_sensor_handle_reg_gpio: 1466 Input Parameters are not proper
+[12944.994779] CAM_INFO: CAM-SENSOR: cam_sensor_util_request_gpio_table: 792 No GPIO data
+[12945.020562] CAM_INFO: CAM-SENSOR: cam_sensor_driver_cmd: 868 CAM_RELEASE_DEV Success, sensor_id:0x586,sensor_slave_addr:0x34
+[12945.132523] CAM_INFO: CAM-CPAS: cam_cpas_hw_start: 1021 AXI client=[4][cci][0] comp[1024], comp_ab[1024], uncomp[1024]
+[12945.132962] CAM_INFO: CAM-SENSOR: cam_sensor_driver_cmd: 818 CAM_ACQUIRE_DEV Success, sensor_id:0x586,sensor_slave_addr:0x34
+[12945.141700] CAM_INFO: CAM-SENSOR: cam_sensor_util_request_gpio_table: 792 No GPIO data
+[12945.142444] CAM_INFO: CAM-SENSOR: msm_cam_sensor_handle_reg_gpio: 1466 Input Parameters are not proper
+[12945.144570] CAM_INFO: CAM-CPAS: cam_cpas_hw_start: 1021 AXI client=[19][icp][0] comp[40000000], comp_ab[40000000], uncomp[40000000]
+[12945.155034] CAM_INFO: CAM-CPAS: cam_cpas_hw_start: 1021 AXI client=[14][ipe][0] comp[1024], comp_ab[1024], uncomp[1024]
+[12945.155702] CAM_INFO: CAM-CPAS: cam_cpas_hw_start: 1021 AXI client=[15][ipe][1] comp[1024], comp_ab[1024], uncomp[1024]
+[12945.180668] CAM_INFO: CAM-SENSOR: cam_sensor_driver_cmd: 818 CAM_ACQUIRE_DEV Success, sensor_id:0x885a,sensor_slave_addr:0x6c
+[12945.193311] CAM_INFO: CAM-SENSOR: cam_sensor_util_request_gpio_table: 792 No GPIO data
+[12945.193951] CAM_INFO: CAM-SENSOR: msm_cam_sensor_handle_reg_gpio: 1466 Input Parameters are not proper
+[12945.236436] CAM_WARN: CAM-ISP: cam_vfe_bus_acquire_wm: 1094 Override width 504 with expected 512
+[12945.236448] CAM_INFO: CAM-CORE: cam_node_handle_ioctl: 756 Acquire HW successful
+[12945.236938] CAM_INFO: CAM-CPAS: cam_cpas_hw_start: 1021 AXI client=[7][csid][1] comp[1024], comp_ab[1024], uncomp[1024]
+[12945.240854] CAM_INFO: CAM-CPAS: cam_cpas_hw_start: 1021 AXI client=[11][ife][1] comp[10640000000], comp_ab[10640000000], uncomp[10640000000]
+[12945.241785] CAM_INFO: CAM-CPAS: cam_cpas_hw_start: 1021 AXI client=[17][cpas-cdm][0] comp[1024], comp_ab[1024], uncomp[1024]
+[12945.243742] CAM_INFO: CAM-CPAS: cam_cpas_hw_start: 1021 AXI client=[0][csiphy][0] comp[1024], comp_ab[1024], uncomp[1024]
+[12945.251400] CAM_INFO: CAM-SENSOR: cam_sensor_driver_cmd: 910 CAM_START_DEV Success, sensor_id:0x586,sensor_slave_addr:0x34
+[12945.252972] CAM_WARN: CAM-ISP: cam_vfe_bus_acquire_wm: 1094 Override width 408 with expected 416
+[12945.252982] CAM_INFO: CAM-CORE: cam_node_handle_ioctl: 756 Acquire HW successful
+[12945.253529] CAM_INFO: CAM-CPAS: cam_cpas_hw_start: 1021 AXI client=[6][csid][0] comp[1024], comp_ab[1024], uncomp[1024]
+[12945.257318] CAM_INFO: CAM-CPAS: cam_cpas_hw_start: 1021 AXI client=[10][ife][0] comp[10640000000], comp_ab[10640000000], uncomp[10640000000]
+[12945.258818] CAM_INFO: CAM-CPAS: cam_cpas_hw_start: 1021 AXI client=[2][csiphy][2] comp[1024], comp_ab[1024], uncomp[1024]
+[12945.266424] CAM_INFO: CAM-SENSOR: cam_sensor_driver_cmd: 910 CAM_START_DEV Success, sensor_id:0x885a,sensor_slave_addr:0x6c
+[12945.288287] cam_ife_csid_irq: 61 callbacks suppressed
+[12945.288293] CAM_INFO: CAM-ISP: cam_ife_csid_irq: 3824 CSID:1 IPP SOF received
+[12945.288299] cam_ife_csid_irq: 203 callbacks suppressed
+[12945.288302] CAM_INFO: CAM-ISP: cam_ife_csid_irq: 4046 CSID RDI:0 SOF received
+[12945.288307] CAM_INFO: CAM-ISP: cam_ife_csid_irq: 4046 CSID RDI:1 SOF received
+[12945.329510] CAM_INFO: CAM-ISP: cam_ife_csid_irq: 3824 CSID:0 IPP SOF received
+[12945.329517] CAM_INFO: CAM-ISP: cam_ife_csid_irq: 4046 CSID RDI:0 SOF received
+[12945.329923] CAM_INFO: CAM-ISP: cam_ife_csid_irq: 3824 CSID:1 IPP SOF received
+[12945.329929] CAM_INFO: CAM-ISP: cam_ife_csid_irq: 4046 CSID RDI:0 SOF received
+[12945.329933] CAM_INFO: CAM-ISP: cam_ife_csid_irq: 4046 CSID RDI:1 SOF received
+[12945.347595] [cds_ol][0x39e2d5d2ff][19:46:34.966340] wlan: [3525:I:QDF] DHCP-D RX: SA:58:ea:1f:e1:f8:e0 DA:ff:ff:ff:ff:ff:ff
+[12945.371163] CAM_INFO: CAM-ISP: cam_ife_csid_irq: 3824 CSID:0 IPP SOF received
+[12945.371170] CAM_INFO: CAM-ISP: cam_ife_csid_irq: 4046 CSID RDI:0 SOF received
+[12945.371565] CAM_INFO: CAM-ISP: cam_ife_csid_irq: 3824 CSID:1 IPP SOF received
+[12945.371571] CAM_INFO: CAM-ISP: cam_ife_csid_irq: 4046 CSID RDI:0 SOF received
+[12945.371574] CAM_INFO: CAM-ISP: cam_ife_csid_irq: 4046 CSID RDI:1 SOF received
+[12945.412786] CAM_INFO: CAM-ISP: cam_ife_csid_irq: 3824 CSID:0 IPP SOF received
+[12945.412792] CAM_INFO: CAM-ISP: cam_ife_csid_irq: 4046 CSID RDI:0 SOF received
+[12945.413216] CAM_INFO: CAM-ISP: cam_ife_csid_irq: 3824 CSID:1 IPP SOF received
+[12945.413220] CAM_INFO: CAM-ISP: cam_ife_csid_irq: 4046 CSID RDI:0 SOF received
+[12945.454444] CAM_INFO: CAM-ISP: cam_ife_csid_irq: 3824 CSID:0 IPP SOF received
+[12945.454848] CAM_INFO: CAM-ISP: cam_ife_csid_irq: 3824 CSID:1 IPP SOF received
+[12945.496085] CAM_INFO: CAM-ISP: cam_ife_csid_irq: 3824 CSID:0 IPP SOF received
+[12945.650870] bimc-bwmon: Zone thres larger than hw limit: hi:72090 med:19661 lo:0
+[12946.208472] FG: fg_psy_get_property: unsupported property 67
+[12946.208528] Get prop 67 is not supported in pc_port
+[12946.208555] batt power supply prop 67 not supported
+[12946.209885] FG: fg_gen4_prime_cc_soc_sw: cc_soc_sw: 3fffffff
+[12946.210202] FG: status_change_work: charge_status:4 charge_type:1 charge_done:1
+[12946.220791] batteryd: /sys/class/power_supply/usb/real_type = USB_CDP
+[12946.220988] healthd: battery l=100 v=4351 t=24.5 h=2 st=5 c=0 fc=3979000 cc=0 tl=0 ct=USB_CDP chg=a
+[12946.221087] healthd: battery l=100 v=4351 t=24.5 h=2 st=5 c=0 fc=3979000 cc=0 tl=0 ct=USB_CDP chg=a
+[12946.224023] healthd: battery l=100 v=4351 t=24.5 h=2 st=5 c=0 fc=3979000 cc=0 tl=0 ct=USB_CDP chg=a
+[12946.611505] FG: fg_battery_soc_smooth_tracking: soc:100, last_soc:100, raw_soc:100, soc_changed:1.
+[12946.611522] FG: soc_monitor_work: soc:100, raw_soc:100, c:0, s:4
+[12947.343569] healthd: battery l=100 v=4351 t=24.5 h=2 st=5 c=0 fc=3979000 cc=0 tl=0 ct=USB_CDP chg=a
+[12947.343789] healthd: battery l=100 v=4351 t=24.5 h=2 st=5 c=0 fc=3979000 cc=0 tl=0 ct=USB_CDP chg=a
+[12947.348371] healthd: battery l=100 v=4351 t=24.5 h=2 st=5 c=0 fc=3979000 cc=0 tl=0 ct=USB_CDP chg=a
+[12948.520715] [cds_ol][0x39e67772c1][19:46:38.139457] wlan: [3525:I:QDF] DHCP-D RX: SA:58:ea:1f:e1:f8:e0 DA:ff:ff:ff:ff:ff:ff
+[12950.326338] cam_ife_csid_irq: 231 callbacks suppressed
+[12950.326342] CAM_INFO: CAM-ISP: cam_ife_csid_irq: 3824 CSID:0 IPP SOF received
+[12950.326350] cam_ife_csid_irq: 352 callbacks suppressed
+[12950.326353] CAM_INFO: CAM-ISP: cam_ife_csid_irq: 4046 CSID RDI:0 SOF received
+[12950.326735] CAM_INFO: CAM-ISP: cam_ife_csid_irq: 3824 CSID:1 IPP SOF received
+[12950.326739] CAM_INFO: CAM-ISP: cam_ife_csid_irq: 4046 CSID RDI:0 SOF received
+[12950.326742] CAM_INFO: CAM-ISP: cam_ife_csid_irq: 4046 CSID RDI:1 SOF received
+[12950.367983] CAM_INFO: CAM-ISP: cam_ife_csid_irq: 3824 CSID:0 IPP SOF received
+[12950.367992] CAM_INFO: CAM-ISP: cam_ife_csid_irq: 4046 CSID RDI:0 SOF received
+[12950.368380] CAM_INFO: CAM-ISP: cam_ife_csid_irq: 3824 CSID:1 IPP SOF received
+[12950.368385] CAM_INFO: CAM-ISP: cam_ife_csid_irq: 4046 CSID RDI:0 SOF received
+[12950.368389] CAM_INFO: CAM-ISP: cam_ife_csid_irq: 4046 CSID RDI:1 SOF received
+[12950.409622] CAM_INFO: CAM-ISP: cam_ife_csid_irq: 3824 CSID:0 IPP SOF received
+[12950.409631] CAM_INFO: CAM-ISP: cam_ife_csid_irq: 4046 CSID RDI:0 SOF received
+[12950.410020] CAM_INFO: CAM-ISP: cam_ife_csid_irq: 3824 CSID:1 IPP SOF received
+[12950.410026] CAM_INFO: CAM-ISP: cam_ife_csid_irq: 4046 CSID RDI:0 SOF received
+[12950.410029] CAM_INFO: CAM-ISP: cam_ife_csid_irq: 4046 CSID RDI:1 SOF received
+[12950.451270] CAM_INFO: CAM-ISP: cam_ife_csid_irq: 3824 CSID:0 IPP SOF received
+[12950.451280] CAM_INFO: CAM-ISP: cam_ife_csid_irq: 4046 CSID RDI:0 SOF received
+[12950.451659] CAM_INFO: CAM-ISP: cam_ife_csid_irq: 3824 CSID:1 IPP SOF received
+[12950.493054] CAM_INFO: CAM-ISP: cam_ife_csid_irq: 3824 CSID:0 IPP SOF received
+[12950.493299] CAM_INFO: CAM-ISP: cam_ife_csid_irq: 3824 CSID:1 IPP SOF received
+[12951.025556] FG: fg_psy_get_property: unsupported property 67
+[12951.025612] Get prop 67 is not supported in pc_port
+[12951.025651] batt power supply prop 67 not supported
+[12951.028232] FG: fg_gen4_adjust_ki_coeff_full_soc: Wrote ki_coeff_full_soc [2442 2442]
+[12951.028467] QNOVO_NOT_OK: current vote is now 0 voted by HW_OK_TO_QNOVO_VOTER,1, previous voted 1
+[12951.036548] FG: status_change_work: charge_status:1 charge_type:3 charge_done:0
+[12951.040731] batteryd: /sys/class/power_supply/usb/real_type = USB_CDP
+[12951.041098] healthd: battery l=100 v=4352 t=24.5 h=2 st=2 c=0 fc=3979000 cc=0 tl=0 ct=USB_CDP chg=a
+[12951.041184] healthd: battery l=100 v=4352 t=24.5 h=2 st=2 c=0 fc=3979000 cc=0 tl=0 ct=USB_CDP chg=a
+[12951.043747] healthd: battery l=100 v=4352 t=24.5 h=2 st=2 c=0 fc=3979000 cc=0 tl=0 ct=USB_CDP chg=a
+[12951.061909] batteryd: batt info is over limited 3145752
+[12951.229243] FG: fg_psy_get_property: unsupported property 67
+[12951.229307] Get prop 67 is not supported in pc_port
+[12951.229349] batt power supply prop 67 not supported
+[12951.230667] PL_AWAKE: current vote is now 1 voted by TAPER_END_VOTER,0, previous voted 0
+[12951.230922] FG: status_change_work: charge_status:1 charge_type:4 charge_done:0
+[12951.238128] FCC: current vote is now -22 voted by TAPER_STEPPER_VOTER,5, previous voted 4000000
+[12951.238158] FCC: current vote is now 4000000 voted by STEP_CHG_VOTER,7, previous voted -22
+[12951.238214] PL_AWAKE: current vote is now 0 voted by TAPER_END_VOTER,0, previous voted 1
+[12951.241662] healthd: battery l=100 v=4352 t=24.5 h=2 st=2 c=0 fc=3979000 cc=0 tl=0 ct=USB_CDP chg=a
+[12951.241825] healthd: battery l=100 v=4352 t=24.5 h=2 st=2 c=0 fc=3979000 cc=0 tl=0 ct=USB_CDP chg=a
+[12951.243196] batteryd: /sys/class/power_supply/usb/real_type = USB_CDP
+[12951.246613] healthd: battery l=100 v=4352 t=24.5 h=2 st=2 c=0 fc=3979000 cc=0 tl=0 ct=USB_CDP chg=a
+[12951.592631] [cds_ol][0x39e9fb6c20][19:46:41.211370] wlan: [3525:I:QDF] DHCP-D RX: SA:58:ea:1f:e1:f8:e0 DA:ff:ff:ff:ff:ff:ff
