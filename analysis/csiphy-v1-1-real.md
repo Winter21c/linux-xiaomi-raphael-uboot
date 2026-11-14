@@ -173,10 +173,30 @@ register of each enabled block (`0x000`, `0x200`, `0x700` for a 2-lane sensor).
 | reset / IRQ / lane tables | proven, extracted verbatim |
 | lane mask algorithm | proven |
 | lane block roles | proven (clock at 0x700) |
-| `csiphy_common_reg_1_1` decode | **open** - values do not look like write pairs |
+| `csiphy_common_reg_1_1` decode | **resolved: the table is dead code**. `cam_csiphy_parse_dt_info` fills res+72/80/88/96/104/112/120 and never 0x5513028/sizeof, so nothing reads it |
 | mainline driver | written, **syntax-checked** against stub headers (round 61) |
+| `csiphy->field_508` | **resolved for our case**: it only selects between the two conditional cases of the reset-table switch (types 1 and the one implementing the inverse); with a normal D-PHY the flag is 0, so the record `0x814 = 0xd5` (type 1) is written, which is what the driver does unconditionally |
 | frames on mainline | not yet attempted (needs the device) |
 
 Two compile-breaking defects were found and fixed by the round-61 syntax check:
 the register table `csiphy_1_1_reset[]` collided with a function of the same name,
 and the struct field order was swapped.  Neither would have compiled.
+
+## The complete `res` layout (round 63)
+
+All assignments `cam_csiphy_parse_dt_info` makes, in every firmware branch:
+
+```
+res + 28  reset table entry count
+res + 32  IRQ table entry count
+res + 72  csiphy_reset_reg_1_1        (config path, 7-way type switch)
+res + 80  csiphy_2ph_v1_1_reg         (cphy_data_rate_config, 11 records)
+res + 88  csiphy_irq_reg_1_1          (power-on cam_csiphy_reset, raw loop)
+res + 96  csiphy_2ph_v1_1_combo_mode_reg
+res + 104 csiphy_3ph_v1_1_reg
+res + 112 csiphy_3ph_v1_1_combo_mode_reg
+res + 120 csiphy_v1_1 hw_info
+```
+
+`csiphy_common_reg_1_1` (0x5513028) is **not** among them, i.e. it is compiled in
+but unused by this firmware - which is why its contents never had to decode.

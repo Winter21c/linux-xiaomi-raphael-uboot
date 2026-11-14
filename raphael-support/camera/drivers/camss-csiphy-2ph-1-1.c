@@ -228,16 +228,16 @@ static int csiphy_1_1_init(struct csiphy_device *csiphy)
 }
 
 /*
- * csiphy_1_1_hw_version_read - informational only.  0x828 is the lowest control
- * register this PHY is known to implement (the vendor common table writes it),
- * and the whole block is powered and clocked when this runs.
+ * csiphy_1_1_hw_version_read - informational only.  There is no version
+ * register known for this PHY, so read 0x800, which the reset sequence just
+ * wrote and which therefore certainly exists.
  */
 static void csiphy_1_1_hw_version_read(struct csiphy_device *csiphy,
 				       struct device *dev)
 {
-	u32 hw = readl_relaxed(csiphy->base + 0x828);
+	u32 hw = readl_relaxed(csiphy->base + 0x800);
 
-	dev_dbg(dev, "CSIPHY%d v1.1 status 0x828 = 0x%08x\n",
+	dev_dbg(dev, "CSIPHY%d v1.1 control 0x800 = 0x%08x\n",
 		csiphy->id, hw);
 }
 
