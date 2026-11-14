@@ -88,3 +88,50 @@ difference is inside the global page writes (which we already replay verbatim).
   register dump is emitted;
 * `/dev/mem` - the kernel refuses camera MMIO ranges (ENXIO), even after creating
   the node by hand.
+
+## 6. Complete camera wiring, from the live vendor device tree
+
+Decoded from `data/vendor-fdt.dts` (each `qcom,cam-sensor@N` node):
+
+| sensor | csiphy | CCI dev / master | MCLK gpio | reset gpio | vdig-en gpio | MCLK |
+|---|---|---|---|---|---|---|
+| @0 IMX586 wide | 0 | 0 / 0 | 13 | 28 | **90** | 19.2 MHz |
+| @1 OV8856 tele | 2 | 0 / 1 | 14 | 30 | **93** | 19.2 MHz |
+| @2 front | 1 | 0 / 0 | 15 | 12 | **95** | 19.2 MHz |
+| @3 ultrawide | 3 | **1** / 0 | 16 | 23 | **34** | 19.2 MHz |
+
+Supplies (all four cameras):
+
+```
+cam_vio    = camera_viodd_ldo   1800000 uV
+cam_vana   = pm8150l_bob        3008000 uV
+cam_vdig   = pm8150l_s8         1352000 uV
+cam_v_custom1 = pm8150_l17      3096000 uV
+cam_v_custom2 = pm8150_s5       1904000 uV   (wide only)
+```
+
+Two things mainline does not have today:
+
+1. **CCI controller 1 (`cci@ac4b000`)** - the ultrawide is on CCI device 1; our DT
+   only instantiates CCI0, so the ultrawide can never be reached.
+2. the per-camera `vdig` enable GPIOs (90 / 93 / 95 / 34) - mainline only has the
+   tele one (93) as a fixed regulator.
+
+Everything about the tele (csiphy2, CCI0 master 1, gpio 14/30/93, 19.2 MHz,
+bob/s8/viodd/l17) already matches what mainline drives.
+
+## 7. What the stocks system does NOT expose (so nobody repeats the effort)
+
+* no CSIPHY/CSID register values: `kprobe_events` missing, only `tracepoint` PMU,
+  `camera` tracepoints cover IRQ/CDM/req-mgr only, `/dev/mem` refuses camera MMIO,
+  and no debugfs knob (`enable_reg_dump`, `ife_csid_debug`, `debug_mdl`,
+  `csiphy_dump`) emits a register dump;
+* `debug_mdl=65535` does flood dmesg (~2000 lines/s) and the ring buffer then drops
+  the interesting lines, so keep it at 0.
+
+## 8. Consequence for the mainline test
+
+The single untested change is the per-lane enable bit (`0x14 |= 0x10`) plus the
+`0x04` lane-mask OR, both implemented in
+`../../drivers/camss-csiphy-2ph-1-0.c.vendor-global`.  Everything else - routing,
+clocks, MCLK, supplies, lane count - now has vendor evidence saying it is right.
