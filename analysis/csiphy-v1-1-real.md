@@ -30,6 +30,31 @@ csiphy_2ph_v1_1_combo_mode_reg    0x55131bc
 csiphy_common_reg_1_1             0x5513028   (decode still uncertain)
 ```
 
+### Correction: `cam_csiphy_enable_hw` writes no registers (round 71)
+
+Disassembled from the same image with `aarch64-linux-gnu-objdump`:
+
+```
+390ea58  ldr  w9, [x0, #656]     ; field_656
+390ea5c  ldr  x8, [x0, #536]     ; a rate
+390ea70  ldrb w9, [x0, #508]     ; field_508
+390ea7c  cmp  w9, #0x12
+390ea8c  mov  w9, #0x3   /  390ea80 mov w9, #0x4
+390ea90  lsr  x8, x8, x9
+390eac4  add  x19, x19, #1
+390eb0c  ret                    ; returns a clock index
+```
+
+It walks eight entries looking for the one whose recorded rate fits the current data
+rate and returns that index - it is the **clock vote**, not a programming step.  The
+register programming is `cam_csiphy_config_dev`, whose visible body is the table replay
+plus a verification read (`cam_io_r_mb` / `cam_io_r`) that compares each register with
+the table value and logs a mismatch.
+
+The practical consequence: there is no hidden "enable" register write hiding in
+`enable_hw`.  Our replay produces exactly the table values, which is why the readback
+matches on hardware.
+
 ## Register map (proven)
 
 | range | role |
