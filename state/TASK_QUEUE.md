@@ -11,7 +11,9 @@
 | A5.2 | P1 | partial | IMX586 (wide, CCI0 m0 @0x1a): public RPi driver found and ported offline to the 7.3 API (`camera/drivers/imx586.c`, MIT repo/GPL driver). Next: build as obj-m on the device, add the DT node with VANA/VDIG/VDDL + vs5/vl17 supplies, check chip id 0x30dc==0x32 |
 | A5.3 | P1 | open | Front S5K3T2 (CSIPHY1, CCI0 m0, MCLK2 gpio15, reset gpio12, VDIG_EN gpio95): power it with patch 0006 + keep_power, scan /dev/i2c-3, read the Samsung id at 0x0000, then write the driver. Also identify 0x21 on CCI0 master1 |
 | A5.5 | P2 | blocked | Ultrawide S5K3L6 on CCI1 master0: unreachable because i2c-qcom-cci has NUM_MASTERS=2 and only CCI0 is instantiated. Blocker: needs a 4-master driver change or a second CCI node (shared cci_top region) |
-| A5.4 | P2 | open | Streaming: once the sensor joins the graph, set formats with a small V4L2 ioctl tool (media-ctl/v4l2-ctl are not installed) and capture from msm_vfe2_rdi* |
+| A5.4 | P1 | partial | Streaming: media-ctl/v4l2-ctl now installed. Pipeline starts, PHY programmed (round 65), CSID silent |
+| A5.6 | P0 | open | **CSID block does not answer.** Every CSID register reads back zero (`rx_cfg0` written 0x00200211, read 0) while `msm_csiphy2` two blocks away answers (`0x000=0x90 0x700=0x80 0x82c=0xff 0x800=0x00`). Ruled out so far: link states (all ENABLED), media bus formats (all SGRBG10_1X10 1640x1232), clock tree (`cam_cc_ife_0_clk_src` 400 MHz, `ife_0_gdsc` on), DTB `reg`/`reg-names` pairing (csid0=0xacb3000, matches the vendor tree), power-domain handling (same result with `raphael_skip_pd=1`). NEXT: prove whether the VFE answers too - if it also reads zero the whole IFE domain is dead, if it answers the fault is inside the CSID block |
+| A5.7 | P2 | open | `tools/lane-sweep.sh` and the `camss_lane_override` module parameter still exist and are untested since the DTB was replaced |
 | A6 | P2 | open | GNSS: gnss.ko present, no DT node/device |
 | A7 | P2 | open | Fingerprint (Goodix) - no mainline driver |
 | A8 | P2 | done | fwupd seccomp_attach_filter kernel Oops identified as cause of a system freeze; fwupd masked |

@@ -305,3 +305,120 @@ What is ready the moment it comes back:
 
 Next action after recovery: run `tools/lane-sweep.sh`; if any permutation lights up
 csid0, pin that mapping in the DTB.
+
+
+## Round 64-66: the v1.1 CSIPHY is verified on hardware
+
+The phone now runs the user's Ubuntu install (ssh `user`/`1234`, sudo `1234`,
+USB NCM at 172.16.42.1).  Full detail in `analysis/device-bringup-round64.md` and
+`analysis/round66-probe-crash-and-recovery.md`.
+
+Working, with device evidence:
+
+* `qcom-camss` builds against the installed headers (clang 19 + a flag filter) and
+  probes: `/dev/media0`, 16 video nodes, 37 entities;
+* OV8856 binds at `3-0036` (the DTB clock had to go back to 19.2 MHz);
+* sensor -> `msm_csiphy2` link is ENABLED once the unresponsive IMX586 async
+  connection is removed from the graph;
+* the whole pipeline is accepted by the kernel and reaches VFE `s_stream`; the
+  `-EPIPE` was a media bus format mismatch (sensor outputs SGRBG10_1X10);
+* **the v1.1 CSIPHY driver programs real hardware**: after the tables are replayed
+  the readback is `0x000=0x90 0x700=0x80 0x82c=0xff 0x800=0x00`, exactly the vendor
+  values, which confirms the 0x800 control block, the four lane blocks, the lane
+  tables and the reset semantics.
+
+Blocked: every CSID register reads back zero (`rx_cfg0` written 0x00200211, read 0)
+while the CSIPHY two blocks away answers normally.  `ife_0_gdsc` reports on and
+`cam_cc_ife_0_clk_src` is 400 MHz, so the clock tree looks right.  This is the next
+thing to attack and it is independent of the CSIPHY work.
+
+Do not raw-`ioremap()` camera blocks: it hangs the bus and reboots the phone.
+`/dev/mem` reads of these windows always return zero and prove nothing.
+An `-EPIPE` from the pipeline start means a **format** mismatch; a missing link
+gives `-ENOLINK`.
+
+## Round 67: the CSID was mapped at the wrong address (fixed)
+
+Full write-up in `analysis/round67-csid-base-address-fix.md`.  `camss-csid.c` picks
+the register base from the CAMSS version; the SM8150 resource table carries
+`.version = CAMSS_8250`, so the driver took the titan-480 alias
+`vfe_base + VFE_480_CSID_OFFSET(0x1200)` = **0xacb0200** instead of the real
+**0xacb3000** the vendor DT assigns.  The fix only takes the alias when the device
+tree has no region for that CSID.
+
+After the fix, on hardware:
+
+```
+RAPHAEL RES csid0 csid0 start=0xacb3000 size=0x1000
+csid0 hw_version reg(0x0)=0x10000000
+csid0 rx_cfg0: wrote=0x00200211 readback=0x00200211
+csiphy2 v1.1 readback: 0x000=00000090 0x700=00000080 0x82c=000000ff 0x800=00000000
+```
+
+The CSID answers and its RX configuration sticks.  Remaining gap: no CSI-2 packet
+reaches it - the OV8856 is **active**, `msm_csiphy2` interrupts fire, `msm_csid0`
+gets none and no bytes are captured.  Next: log the PHY interrupt status
+(0x82c..0x854) to separate "clock detected" from a lane error, then check the lane
+order/polarity and `CSID_RDI_CFG0`.
+
+Operational: `rmmod qcom-camss` segfaults after any stream attempt, so a rebuilt
+module needs a reboot before it can be tested.  Batch experiments per boot.
+
+## Round 68: everything is configured, the data path is still empty
+
+`analysis/round68-all-configured-no-data.md` has the measurements.  Every layer now
+verifies positively: CSID base 0xacb3000 with `hw_version=0x10000000` and `rx_cfg0`
+sticking, CSIPHY tables replayed with **no error bits** in 0x820..0x828, clock lane
+block `700=80 704=0c 708=04 70c=a5`, sensor MCLK at 19.2 MHz, all three sensor rails
+enabled while streaming, and the sensor driver picking `mode 1640x1232 vts=1514` and
+writing `0x0100=0x01`.
+
+Still: `msm_csid0` gets zero interrupts and zero bytes, and no CSI-2 clock is
+detected.  Two dead ends recorded: `camss_lane_override` only exists in the **1-0**
+driver (the round-67 lane sweep was a no-op), and writing `cgc_ovd` (0x04) does not
+make `core_cfg`/`core_ctrl` stick.
+
+Next: add a lane override to `camss-csiphy-2ph-1-1.c` (with the CSID `lane_assign`
+kept consistent), read the sensor's MIPI/PLL registers back over I2C, or compare
+`CSID_CORE_CFG` handling against the vendor `cam_ife_csid_175_200`.
+
+## Rounds 74-76: the device tree is now complete and the motor works
+
+`analysis/round74-popup-motor-works.md`, `round75-all-vdig-and-front-probe.md` and
+`round76-front-camera-mclk.md` have the measurements.
+
+**The pop-up camera motor works.**  Three defects were found and fixed: the motor node
+was missing; its `pwms` cell count was one too long; and the pm8150l LPG channel the
+hardware uses (1) was already claimed by an LED child.  A leftover `motor_gpios:
+gpio-leds` node also held the same pins, keeping the driver in deferred probe.  After
+the fixes:
+
+```
+raphael-popup-motor soc@0:popup-motor: popup motor ready (52083 ns cruise, 720 ms)
+echo 1 > .../position -> "moved to extended"; echo 0 -> "moved to retracted"
+```
+
+The camera physically extended and retracted.
+
+**The device tree now matches the vendor wiring completely:**
+
+* both CCI controllers are in the `cci@ac4a000` node (`reg-names = "cci0","cci1"`);
+* all four per-camera vdig enables exist (GPIO 90 wide, 93 tele, 95 front, 34 ultra);
+* all four camera MCLK pads are muxed - gpio15 (front MCLK2) and gpio16 (ultrawide
+  MCLK3) were **never muxed** until round 76, which alone would have prevented those
+  modules from ever receiving a clock;
+* the motor node references LPG channel 1.
+
+The deployed DTS is synced back to
+`raphael-support/camera/dtb/raphael-camera-final.dts` (160 493 bytes).
+
+**New bring-up tool:** `raphael-support/camera/tools/cam-mclk-hold.c` holds any CAMCC
+clock enabled by id so a camera bus can be probed before a driver exists
+(`insmod cam-mclk-hold.ko clk_id=86` -> MCLK2 at 19.2 MHz).  Note that
+`of_clk_get(node, index)` parses the node's own `clocks` property; a provider lookup
+needs `of_clk_get_from_provider()` with an `of_phandle_args`.
+
+**Front camera:** vendor says CAMF is csiphy1 / CCI0 master0 (`/dev/i2c-2`), MCLK2,
+reset GPIO 12, vdig GPIO 95.  With the clock held and the pins muxed it still does
+not acknowledge, and neither does the wide IMX586 on the same bus; no front-camera
+driver is even built in this kernel (only ov5640 and imx412 under `media/i2c`).

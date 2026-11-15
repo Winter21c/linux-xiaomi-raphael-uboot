@@ -178,3 +178,33 @@ build is being measured.
 Also: reading VFE registers at probe time (`readl` before the block is powered)
 crashes the phone - it panicked and reboot-recovered twice.  Register access is
 only safe after the clocks/power are on.
+
+
+## 2026-11-15 R65-R66. The CSID is the only silent camera block
+
+Measured in a single stream attempt, all three reads taken from the driver's own
+mappings while the pipeline runs:
+
+```
+RAPHAEL VFEDUMP vfe0: 0x0=10020000 0x4=15800000 0x8=000075ff 0x58=00000001
+csiphy2 v1.1 readback: 0x000=00000090 0x700=00000080 0x82c=000000ff 0x800=00000000
+csid0 rx_cfg0: wrote=0x00200211 readback=0x00000000
+```
+
+So the IFE power domain **is** on (the VFE answers with its real hw_version), the
+CSIPHY is programmed correctly, and only the CSID window reads back zeros.  That
+rules out the power domain, the clock tree (`cam_cc_ife_0_csid_clk` is enabled at
+400 MHz during streaming) and the DTB address mapping as far as the other two
+blocks are concerned.
+
+Three rules learned the hard way:
+
+1. **`-EPIPE` from the pipeline start is a media-bus format mismatch.**  The OV8856
+   reports SGRBG10_1X10; every downstream pad must use the same code.  A missing
+   link reports `-ENOLINK`, not `-EPIPE`.
+2. **`rmmod qcom-camss` segfaults** (exit 139) after any stream attempt, and then
+   `insmod` refuses with `Device or resource busy`.  Every rebuilt module therefore
+   needs a reboot before it can be tested; batch the tests per boot.
+3. never add a debug `readl` through a struct pointer before the function has
+   resolved it - that oopsed the kernel at `vfe_set_stream+0xa4`.  Reuse the
+   function's own `vfe`/`csid` locals instead.
