@@ -37,6 +37,7 @@
 #include <linux/module.h>
 #include <linux/moduleparam.h>
 
+#include "camss.h"
 #include "camss-csiphy.h"
 #include "camss-csiphy-2ph-1-1.h"
 #include "csiphy_v1_1_tables.h"
@@ -199,6 +200,15 @@ static void csiphy_1_1_lanes_enable(struct csiphy_device *csiphy,
 	for (i = 0; i < ARRAY_SIZE(csiphy_1_1_2ph); i++)
 		csiphy_1_1_write_rec(csiphy, &csiphy_1_1_2ph[i],
 				     lane_mask, rate);
+
+	/* RAPHAEL READBACK: does the PHY answer on its register window? */
+	dev_info(csiphy->camss->dev,
+		 "csiphy%d v1.1 readback: 0x000=%08x 0x700=%08x 0x82c=%08x 0x800=%08x\n",
+		 csiphy->id,
+		 readl_relaxed(csiphy->base + 0x000),
+		 readl_relaxed(csiphy->base + 0x700),
+		 readl_relaxed(csiphy->base + 0x82c),
+		 readl_relaxed(csiphy->base + 0x800));
 }
 
 static void csiphy_1_1_lanes_disable(struct csiphy_device *csiphy,
