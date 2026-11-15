@@ -422,3 +422,50 @@ needs `of_clk_get_from_provider()` with an `of_phandle_args`.
 reset GPIO 12, vdig GPIO 95.  With the clock held and the pins muxed it still does
 not acknowledge, and neither does the wide IMX586 on the same bus; no front-camera
 driver is even built in this kernel (only ov5640 and imx412 under `media/i2c`).
+
+## Rounds 85-89: the camera is verified on both ends and nothing crosses
+
+`analysis/round86-csiphy-inert.md`, `round87-sensor-verified-phy-silent.md` and
+`analysis/csiphy-v1-1-real.md` carry the measurements.
+
+**Fixed along the way (all committed):**
+
+* `cphy_rx` was never rate-set, so the CSI PHY received at 19.2 MHz instead of 400.
+  The SM8150 resource table also listed rate arrays for only two of its three clocks.
+  The vendor device tree states `clock-rates = <0x17d78400 0 0x11e1a300 0>`, i.e. 400
+  MHz receive and 300 MHz timer - exactly what the driver now reaches.
+* the device tree and the hardware disagreed on the data lanes: with `<1 2>` the PHY
+  programmed blocks 0x000/0x200 while the CSID was told DL0 came from lane 2.  The
+  endpoints now say `<0 1>` and both sides agree (`assign=0x10`).
+* `csiphy0_ep` carried a `remote-endpoint` to the driverless IMX586, which made camss
+  wait for a subdevice that never probes: no subdev nodes were created at all and
+  every `media-ctl --set-v4l2` failed.  Removed, with a comment saying when to restore
+  it.
+* `raphael_write_mask` / `raphael_scan_now` parameters: replay the vendor's lane-enable
+  mask write, and sample the PHY window at any moment for activity.
+
+**The measurement that settles the camera question:**
+
+```
+RAPHAEL SCANNOW csiphy2 changed:            (during an active stream)
+```
+
+Every register in 0x000..0x83c is bit-identical while the sensor streams, in both the
+1640x1232 and 3280x2464 modes.  Meanwhile the sensor itself is fully verified - chip id
+`0x00885a` (24-bit, matches mainline), every MIPI register read back equal to what the
+mode table requests (`300e=20 3015=84 3018=32 3021=23 4800=44 4837=16`), streaming mode
+entered, rails and MCLK correct - and the CSID is proven able to receive via its own
+test generator.
+
+Both ends are correct and nothing crosses between them.  The vendor's own CSIPHY status
+semantics are not recoverable either: `cam_csiphy_irq` and
+`cam_csiphy_cphy_data_rate_config` both load the same table and discard every value
+they read.  `0x82c..0x854` are therefore documented as unproven rather than as
+"interrupt masks".
+
+**Remaining possibilities are physical**: the module flex, the connector, or the
+module's MIPI section.  The handset cannot be opened in this session, so the camera is
+blocked on that.
+
+**Next useful work is in another domain** - see `state/TASK_QUEUE.md` (A4 audio is pure
+userspace and unblocked; A6 GNSS needs a device-tree node).
