@@ -8,7 +8,7 @@
 | (2) mainline CSIPHY driver on base+0x800 | builds against the running kernel, loaded, programmed the PHY on device; sources now in `raphael-support/camera/drivers/` with `BUILD.md` |
 | (3) DTB matching the vendor wiring | deployed at `/boot/dtbs/qcom/sm8150-xiaomi-raphael.dtb`; both CCI controllers, all four per-camera vdig enables (90/93/95/34), all four camera MCLK pads muxed, motor node on pm8150l LPG channel 1; source synced to `raphael-support/camera/dtb/raphael-camera-final.dts` |
 | (4) pop-up motor driver | builds, loads, probes, and **physically extends and retracts the front camera** |
-| (5) commit | **not done** - the host cannot execute any command |
+| (5) commit | **done** - pushed to `raphael-peripherals` (`abcf849`, `4fb1b87`) |
 
 ## The one thing that does not work
 
@@ -43,13 +43,9 @@ every register.
 3. the front/wide modules need the same treatment (their I2C is dead before MIPI even
    matters).
 
-**The host (blocks deliverable 5):**
-
-`bash`, `grep`, `glob` and the REA/Ghidra provider all fail with
-`Unknown system error -122 ... write`, and a probe confirmed commands never actually
-run.  Freeing space in `/tmp` (`rm -rf /tmp/lsrc /tmp/camsssrc /tmp/*.tar.gz`) or
-restarting the session should clear it; after that a single
-`git add -A && git commit` in the fork completes (5).
+**The host: resolved.**  The shell now runs, and deliverable (5) is pushed.  The
+blocker was `Unknown system error -122 ... write` on every command; it cleared on its
+own and no action was taken on the machine to fix it.
 
 ## Tools left behind on the phone
 

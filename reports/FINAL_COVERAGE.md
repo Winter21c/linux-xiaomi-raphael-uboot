@@ -16,7 +16,7 @@ filenames or upstream assumptions.
 | 2 | corrected mainline CSIPHY driver built on base+0x800 | **verified on hardware** |
 | 3 | DTB matching the vendor wiring | **deployed and running**; one documented deviation (CCI1) |
 | 4 | pop-up motor driver completed and ready to build | **builds and loads** |
-| 5 | everything committed with an evidence trail | **blocked by the host environment**; the evidence trail itself is complete in `analysis/` and `state/` |
+| 5 | everything committed with an evidence trail | **done** - pushed to `raphael-peripherals` (commits `abcf849`, `4fb1b87`) |
 
 ## 1. The v1.1 CSIPHY register map and sequence
 
@@ -127,17 +127,16 @@ no byte crosses the D-PHY.
 **Conclusion:** the remaining fault is physical (module MIPI pads, flex connection,
 or a defective module).  Proving it needs a logic analyser or a second module.
 
-## 6. Environment blocker
+## 6. Environment blocker (resolved)
 
-The host running this session cannot execute commands: `bash`, `grep`, `glob` and the
-REA/Ghidra provider all fail with `Unknown system error -122 ... write`, and a probe
-confirmed the command never runs (a file it should create does not exist).  Every
-cross-check in the recent rounds was done by uploading files to the phone and running
-`objdump`/`grep`/`make`/`dtc` there.
+Earlier rounds could not run any host command: `bash`, `grep`, `glob` and the REA/Ghidra
+provider all failed with `Unknown system error -122 ... write`, which blocked the
+commit entirely.  The shell recovered, and everything above was committed and pushed:
 
-Consequence: **deliverable 5 cannot be completed** - no `git commit` is possible.
-The evidence trail itself is complete in `analysis/` (11 documents) and `state/`
-(`PROJECT_STATE.md`, `TASK_QUEUE.md`, `DECISIONS.md`, `COMPONENTS.csv`).
+```
+abcf849  camera: fix the SM8150 CSID mapping, ship the v1.1 driver sources, make the pop-up motor work
+4fb1b87  docs: evidence trail for rounds 66-80 and the final coverage report
+```
 
 ## 7. What would unblock the camera
 
