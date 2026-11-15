@@ -5740,7 +5740,7 @@ camss@ac6a000 {
 				csiphy2_ep: endpoint {
 					phandle = <0x147>;
 					clock-lanes = <0>;
-					data-lanes = <1 2>;
+					data-lanes = <0 1>;
 					remote-endpoint = <0x146>;
 				};
 			};
@@ -5749,7 +5749,7 @@ camss@ac6a000 {
 				reg = <3>;
 				csiphy3_ep: endpoint {
 					clock-lanes = <0>;
-					data-lanes = <1 2>;
+					data-lanes = <0 1>;
 				};
 			};
 		};
@@ -5853,7 +5853,7 @@ cci@ac4a000 {
 					ov8856_tele_ep: endpoint {
 						phandle = <0x146>;
 						link-frequencies = /bits/ 64 <720000000 360000000>;
-						data-lanes = <1 2>;
+						data-lanes = <0 1>;
 						remote-endpoint = <0x147>;
 					};
 				};

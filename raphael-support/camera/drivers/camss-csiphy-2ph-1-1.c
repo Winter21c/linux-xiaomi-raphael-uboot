@@ -170,6 +170,9 @@ static void csiphy_1_1_hw_reset(struct csiphy_device *csiphy)
  * clock lane and bits 0..3 for the data lanes; -1 keeps the computed value.
  */
 static int raphael_lane_mask_11 = -1;
+static int raphael_write_mask = 0;
+module_param(raphael_write_mask, int, 0644);
+MODULE_PARM_DESC(raphael_write_mask, "write the lane enable mask to the lane block bases");
 module_param(raphael_lane_mask_11, int, 0644);
 MODULE_PARM_DESC(raphael_lane_mask_11, "override the CSIPHY v1.1 lane enable mask");
 
@@ -233,11 +236,35 @@ static void csiphy_1_1_lanes_enable(struct csiphy_device *csiphy,
 		for (off = 0x700; off <= 0x71c && n < (int)sizeof(pb) - 12; off += 4)
 			n += snprintf(pb + n, sizeof(pb) - n, " %03x=%02x", off,
 				      readl_relaxed(csiphy->base + off) & 0xff);
-		n += snprintf(pb + n, sizeof(pb) - n, " d0:");
-		for (off = 0x000; off <= 0x01c && n < (int)sizeof(pb) - 12; off += 4)
-			n += snprintf(pb + n, sizeof(pb) - n, " %03x=%02x", off,
-				      readl_relaxed(csiphy->base + off) & 0xff);
+		n += snprintf(pb + n, sizeof(pb) - n, " L0:");
+		for (off = 0x000; off <= 0x00c && n < (int)sizeof(pb) - 12; off += 4)
+			n += snprintf(pb + n, sizeof(pb) - n, "%02x ", readl_relaxed(csiphy->base + off) & 0xff);
+		n += snprintf(pb + n, sizeof(pb) - n, " L1:");
+		for (off = 0x200; off <= 0x20c && n < (int)sizeof(pb) - 12; off += 4)
+			n += snprintf(pb + n, sizeof(pb) - n, "%02x ", readl_relaxed(csiphy->base + off) & 0xff);
+		n += snprintf(pb + n, sizeof(pb) - n, " L2:");
+		for (off = 0x400; off <= 0x40c && n < (int)sizeof(pb) - 12; off += 4)
+			n += snprintf(pb + n, sizeof(pb) - n, "%02x ", readl_relaxed(csiphy->base + off) & 0xff);
 		dev_info(csiphy->camss->dev, "%s", pb);
+	}
+
+	if (raphael_write_mask) {
+		u32 m = 0;
+		int b;
+
+		/* clock lane first, then the data lanes that the mask selects */
+		if (lane_mask & 0x80)
+			m |= 1 << 7;
+		for (b = 0; b < 4; b++)
+			if (lane_mask & (1 << b))
+				m |= 1 << b;
+
+		writel_relaxed(m, csiphy->base + 0x000);
+		writel_relaxed(m, csiphy->base + 0x200);
+		writel_relaxed(m, csiphy->base + 0x700);
+		dev_info(csiphy->camss->dev,
+			 "RAPHAEL WMASK csiphy%d mask=0x%02x wrote 0x%02x to L0/L1/CLK",
+			 csiphy->id, lane_mask, m);
 	}
 
 	/* RAPHAEL PHYBLOCK: dump the whole 0x800 control block */
