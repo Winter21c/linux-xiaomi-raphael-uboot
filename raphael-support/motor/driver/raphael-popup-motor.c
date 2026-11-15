@@ -67,7 +67,7 @@ static int motor_move(struct popup_motor *m, int extend)
 	st.period = m->ramp_period_ns;
 	st.duty_cycle = m->ramp_period_ns / 2;
 	st.enabled = true;
-	ret = pwm_apply_state(m->pwm, &st);
+	ret = pwm_apply_might_sleep(m->pwm, &st);
 	if (ret)
 		goto out;
 	msleep(m->ramp_duration_ms);
@@ -76,7 +76,7 @@ static int motor_move(struct popup_motor *m, int extend)
 	st.period = m->high_period_ns;
 	st.duty_cycle = m->high_period_ns / 2;
 	st.enabled = true;
-	ret = pwm_apply_state(m->pwm, &st);
+	ret = pwm_apply_might_sleep(m->pwm, &st);
 	if (ret)
 		goto out;
 	msleep(m->high_duration_ms);
@@ -84,7 +84,7 @@ static int motor_move(struct popup_motor *m, int extend)
 	/* ramp down */
 	st.period = m->ramp_period_ns;
 	st.duty_cycle = m->ramp_period_ns / 2;
-	pwm_apply_state(m->pwm, &st);
+	pwm_apply_might_sleep(m->pwm, &st);
 	msleep(m->ramp_duration_ms);
 
 	m->position = extend;

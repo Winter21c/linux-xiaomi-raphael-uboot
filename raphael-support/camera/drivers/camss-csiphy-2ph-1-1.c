@@ -165,11 +165,26 @@ static void csiphy_1_1_hw_reset(struct csiphy_device *csiphy)
 			     ARRAY_SIZE(csiphy_1_1_irq));
 }
 
+/*
+ * Runtime lane-mask override for bring-up.  The vendor mask uses bit 7 for the
+ * clock lane and bits 0..3 for the data lanes; -1 keeps the computed value.
+ */
+static int raphael_lane_mask_11 = -1;
+module_param(raphael_lane_mask_11, int, 0644);
+MODULE_PARM_DESC(raphael_lane_mask_11, "override the CSIPHY v1.1 lane enable mask");
+
 static void csiphy_1_1_lanes_enable(struct csiphy_device *csiphy,
 				    struct csiphy_config *cfg,
 				    s64 link_freq, u8 lane_mask)
 {
 	struct csiphy_lanes_cfg *lc = &cfg->csi2->lane_cfg;
+
+	if (raphael_lane_mask_11 >= 0) {
+		lane_mask = (u8)raphael_lane_mask_11;
+		dev_info(csiphy->camss->dev,
+			 "RAPHAEL LANE csiphy%d override mask 0x%02x",
+			 csiphy->id, lane_mask);
+	}
 	u32 rate = csiphy_1_1_rate_code(link_freq);
 	int i, j;
 
@@ -209,6 +224,33 @@ static void csiphy_1_1_lanes_enable(struct csiphy_device *csiphy,
 		 readl_relaxed(csiphy->base + 0x700),
 		 readl_relaxed(csiphy->base + 0x82c),
 		 readl_relaxed(csiphy->base + 0x800));
+	/* RAPHAEL PHYCLK: clock lane block and the data lane blocks */
+	{
+		char pb[256];
+		int n = 0, off;
+
+		n += snprintf(pb + n, sizeof(pb) - n, "RAPHAEL PHYCLK csiphy%d clk:", csiphy->id);
+		for (off = 0x700; off <= 0x71c && n < (int)sizeof(pb) - 12; off += 4)
+			n += snprintf(pb + n, sizeof(pb) - n, " %03x=%02x", off,
+				      readl_relaxed(csiphy->base + off) & 0xff);
+		n += snprintf(pb + n, sizeof(pb) - n, " d0:");
+		for (off = 0x000; off <= 0x01c && n < (int)sizeof(pb) - 12; off += 4)
+			n += snprintf(pb + n, sizeof(pb) - n, " %03x=%02x", off,
+				      readl_relaxed(csiphy->base + off) & 0xff);
+		dev_info(csiphy->camss->dev, "%s", pb);
+	}
+
+	/* RAPHAEL PHYBLOCK: dump the whole 0x800 control block */
+	{
+		char pb[256];
+		int off, n = 0;
+
+		n += snprintf(pb + n, sizeof(pb) - n, "RAPHAEL PHYBLOCK csiphy%d:", csiphy->id);
+		for (off = 0x800; off <= 0x83c && n < (int)sizeof(pb) - 12; off += 4)
+			n += snprintf(pb + n, sizeof(pb) - n, " %03x=%02x", off,
+				      readl_relaxed(csiphy->base + off) & 0xff);
+		dev_info(csiphy->camss->dev, "%s", pb);
+	}
 }
 
 static void csiphy_1_1_lanes_disable(struct csiphy_device *csiphy,
@@ -221,11 +263,18 @@ static irqreturn_t csiphy_1_1_isr(int irq, void *dev)
 {
 	struct csiphy_device *csiphy = dev;
 	u32 status = readl_relaxed(csiphy->base + 0x82c);
+	u32 status2 = readl_relaxed(csiphy->base + 0x830);
+	char b[128];
 
-	if (!status)
+	if (!status && !status2)
 		return IRQ_NONE;
 
+	snprintf(b, sizeof(b), "RAPHAEL PHYIRQ csiphy%d 0x82c=0x%08x 0x830=0x%08x 0x854=0x%08x",
+		 csiphy->id, status, status2, readl_relaxed(csiphy->base + 0x854));
+	dev_info(csiphy->camss->dev, "%s", b);
+
 	writel_relaxed(status, csiphy->base + 0x82c);
+	writel_relaxed(status2, csiphy->base + 0x830);
 	return IRQ_HANDLED;
 }
 

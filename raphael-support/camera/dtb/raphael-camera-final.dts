@@ -11,6 +11,7 @@
 	chassis-type = "handset";
 
 	motor_gpios: gpio-leds {
+		status = "disabled";
 		compatible = "gpio-leds";
 
 		motor_en {
@@ -2853,6 +2854,21 @@
 			bias-disable;
 			phandle = <0x143>;
 		};
+		mclk2_pins: cam-mclk2-default-state {
+			pins = "gpio15";
+			function = "cam_mclk";
+			drive-strength = <2>;
+			bias-disable;
+			phandle = <0x7f4>;
+		};
+
+		mclk3_pins: cam-mclk3-default-state {
+			pins = "gpio16";
+			function = "cam_mclk";
+			drive-strength = <2>;
+			bias-disable;
+			phandle = <0x7f5>;
+		};
 		};
 
 		remoteproc@4080000 {
@@ -4779,6 +4795,7 @@
 					#address-cells = <0x01>;
 					#size-cells = <0x00>;
 					#pwm-cells = <0x02>;
+					phandle = <0x7f0>;
 					status = "okay";
 
 					led@1 {
@@ -4787,6 +4804,7 @@
 						function = "status";
 						function-enumerator = <0x00>;
 						label = "popup-camera-left";
+											status = "disabled";
 					};
 
 					led@2 {
@@ -4795,6 +4813,7 @@
 						function = "status";
 						function-enumerator = <0x01>;
 						label = "popup-camera-right";
+											status = "disabled";
 					};
 				};
 
@@ -5561,6 +5580,51 @@
 			vin-supply = <0xff>;
 			phandle = <0x145>;
 		};
+		camera_vdig_wide: regulator-camera-vdig-wide {
+			compatible = "regulator-fixed";
+			regulator-name = "camera_vdig_wide";
+			regulator-min-microvolt = <1352000>;
+			regulator-max-microvolt = <1352000>;
+			enable-active-high;
+			gpio = <0x55 90 0>;
+			vin-supply = <0xff>;
+			phandle = <0x7f1>;
+		};
+		camera_vdig_front: regulator-camera-vdig-front {
+			compatible = "regulator-fixed";
+			regulator-name = "camera_vdig_front";
+			regulator-min-microvolt = <1352000>;
+			regulator-max-microvolt = <1352000>;
+			enable-active-high;
+			gpio = <0x55 95 0>;
+			vin-supply = <0xff>;
+			phandle = <0x7f2>;
+		};
+		camera_vdig_uw: regulator-camera-vdig-uw {
+			compatible = "regulator-fixed";
+			regulator-name = "camera_vdig_uw";
+			regulator-min-microvolt = <1352000>;
+			regulator-max-microvolt = <1352000>;
+			enable-active-high;
+			gpio = <0x55 34 0>;
+			vin-supply = <0xff>;
+			phandle = <0x7f3>;
+		};
+
+		popup-motor {
+			compatible = "xiaomi,raphael-popup-motor";
+			pwms = <0x7f0 0x01 0x0f4240>;
+			mode0-gpios = <0x55 0x15 0x00>;
+			mode1-gpios = <0x55 0x21 0x00>;
+			sleep-gpios = <0x55 0x23 0x00>;
+			dir-gpios = <0x55 0x09 0x00>;
+			pwren-gpios = <0x55 0x82 0x00>;
+			high-period-ns = <52083>;
+			high-duration-ms = <720>;
+			ramp-period-ns = <625000>;
+			ramp-duration-ms = <50>;
+			status = "okay";
+		};
 camss@ac6a000 {
 			/* MIPI CSI PHY rails: PM8150L L3 1.2 V (vendor: mipi-csi-vdd) */
 			vdda-phy-supply = <0x72>;
@@ -5711,7 +5775,7 @@ cci@ac4a000 {
 		/* also hold the CAMCC MCLK pads muxed: the sensor drivers
 		 * release their own pinctrl state when a probe fails, and the
 		 * sensors then lose their clock. */
-		pinctrl-0 = <0x140 0x141 0x142 0x143>;
+		pinctrl-0 = <0x140 0x141 0x142 0x143 0x7f4 0x7f5>;
 
 		#address-cells = <1>;
 		#size-cells = <0>;
