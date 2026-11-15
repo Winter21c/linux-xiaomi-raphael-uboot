@@ -154,6 +154,7 @@ static int csiphy_set_clock_rates(struct csiphy_device *csiphy)
 
 		if (csiphy->rate_set[i]) {
 			u64 min_rate = link_freq / 4;
+		(void)min_rate;
 			long round_rate;
 
 			camss_add_clock_margin(&min_rate);
@@ -181,6 +182,11 @@ static int csiphy_set_clock_rates(struct csiphy_device *csiphy)
 			}
 
 			csiphy->timer_clk_rate = round_rate;
+
+			dev_info(csiphy->camss->dev,
+				 "RAPHAEL CLKRATE csiphy%d clock=%s nfreq=%u min_rate=%llu pick=%ld round=%ld",
+				 csiphy->id, clock->name, clock->nfreqs, min_rate,
+				 (long)clock->freq[j], round_rate);
 
 			ret = clk_set_rate(clock->clk, csiphy->timer_clk_rate);
 			if (ret < 0) {
@@ -696,6 +702,19 @@ int msm_csiphy_subdev_init(struct camss *camss,
 		}
 
 		csiphy->rate_set[i] = csiphy_match_clock_name(clock->name, "csiphy%d", csiphy->id);
+
+		/*
+		 * raphael: cphy_rx is the CSI PHY receive clock and has to follow the
+		 * sensor data rate.  Upstream only rate-sets the *_timer and csiphy
+		 * clocks, so this one stayed at its 19.2 MHz default (measured during
+		 * a stream) - twenty times too slow for a 720 Mbps/lane link.
+		 */
+		if (!csiphy->rate_set[i])
+			csiphy->rate_set[i] = csiphy_match_clock_name(clock->name, "cphy_rx", -1);
+
+		dev_info(camss->dev, "RAPHAEL CLKSET csiphy%u clk[%d]=%s nfreq=%u rate_set=%d",
+			 csiphy->id, i, clock->name, clock->nfreqs,
+			 (int)csiphy->rate_set[i]);
 	}
 
 	/* CSIPHY supplies */
