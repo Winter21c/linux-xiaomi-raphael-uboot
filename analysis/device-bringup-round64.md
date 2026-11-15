@@ -56,3 +56,49 @@ the driver's own mapping and keep the probe passive.
 3. The `ife0_csid_clk_src` rate stays at 19.2 MHz in `clk_summary`, i.e.
    `clk_set_rate()` did not take effect; a block clocked at the XO rate may not
    finish its internal reset, which would look exactly like this.
+
+
+## Round 65: the v1.1 CSIPHY is verified working on hardware
+
+After matching every pad to the sensor's actual Bayer order the pipeline starts and
+the PHY is programmed.  The driver's own readback, printed right after the lane and
+IRQ tables are replayed:
+
+```
+csiphy2 v1.1 readback: 0x000=00000090 0x700=00000080 0x82c=000000ff 0x800=00000000
+```
+
+* `0x000 = 0x90` - data lane 0 block, exactly the vendor's table value
+* `0x700 = 0x80` - clock lane block, confirms the clock lane really is at 0x700
+* `0x82c = 0xff` - first of the eleven interrupt masks
+* `0x800 = 0x00` - reset released
+
+This confirms on real hardware everything the reverse engineering had claimed: the
+0x800-based control block, the four lane blocks at 0x000/0x200/0x400/0x700, the
+14-record lane tables, the reset table semantics and the IRQ mask block.
+
+### The `-EPIPE` was a format mismatch, not a link or power problem
+
+The kernel refuses to start a pipeline whose connected pads disagree on the media
+bus format, and reports it as `-EPIPE` from `video_device_pipeline_alloc_start()`.
+The sensor reports **SGRBG10_1X10** (its native order) and every downstream pad had
+been configured for SBGGR10_1X10.  Setting csiphy2, csid0 and vfe0_rdi0 to
+SGRBG10_1X10 and the video node to `pgAA` makes the pipeline start.
+
+Worth remembering: an `-EPIPE` from the pipeline start is a **format** mismatch,
+not a missing link; a missing link gives `-ENOLINK`.
+
+### What is left: the CSID does not answer
+
+The pipeline now starts and reaches `s_stream`:
+
+```
+csid0 rx_cfg0: wrote=0x00200211 readback=0x00000000
+csid0 state: en_vc=0x1 lane_cnt=2 lane_assign=0x21 csiphy_id=2 phy_ok=1
+```
+
+The configuration the driver computes is right (2 lanes, csiphy2, lane assign 0x21),
+but every CSID register reads back zero while the CSIPHY two blocks away answers
+normally.  `cam_cc_ife_0_clk_src` is at 400 MHz and `ife_0_gdsc` reports on, so the
+clock tree looks correct; the CSID window itself stays dead.  That is the next thing
+to investigate, and it is independent of the CSIPHY work.
