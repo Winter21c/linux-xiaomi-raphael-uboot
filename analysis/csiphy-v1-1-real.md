@@ -89,6 +89,41 @@ There is **no second register page**. Everything is inside the 0x1000 window the
 device tree already maps, so the mainline mapping is correct - the earlier
 "control block at base+0x1000" was a property of the Mi 9 PHY only.
 
+## The vendor's own clock and rail configuration (round 89)
+
+The shipped device tree states the v1.1 PHY's operating point directly:
+
+```
+cam_csiphy2: qcom,csiphy@ac67000 {
+        compatible = "qcom,csiphy-v1.1", "qcom,csiphy";
+        reg = <0xac67000 0x1000>;
+        gdscr-supply = <0x32>;                 /* the CAMSS GDSC */
+        csi-vdd-voltage = <0x124f80>;          /* 1 200 000 uV */
+        mipi-csi-vdd-supply = <0x2a>;          /* pm8150l_l3 */
+        clocks = <0x33 0x0e 0x33 0x19 0x33 0x14 0x33 0x13>;
+        clock-names = "cphy_rx_clk_src", "csiphy2_clk",
+                      "csi2phytimer_clk_src", "csi2phytimer_clk";
+        clock-cntl-level = "turbo";
+        clock-rates = <0x17d78400 0x00 0x11e1a300 0x00>;
+};
+```
+
+Decoded:
+
+| clock | rate |
+|---|---|
+| `cphy_rx_clk_src` | 0x17d78400 = **400 000 000** |
+| `csiphy2_clk` | 0 (left alone) |
+| `csi2phytimer_clk_src` | 0x11e1a300 = **300 000 000** |
+
+This is exactly the operating point our driver reaches after the round-85
+`cphy_rx` fix (400 / 300 / 400 MHz, read back from `clk_summary`), and it confirms that
+leaving `cphy_rx` at its 19.2 MHz default was wrong: the vendor drives it at 400 MHz
+too.
+
+The rail matches as well - `mipi-csi-vdd` is `pm8150l_l3`, which is the same
+`vreg_l3c_1p2` our `vdda-phy-supply` points at.
+
 ## Record format (proven from the disassembly)
 
 ```c
