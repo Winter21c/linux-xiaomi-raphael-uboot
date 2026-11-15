@@ -5713,10 +5713,17 @@ camss@ac6a000 {
 			port@0 {
 				reg = <0>;
 				csiphy0_ep: endpoint {
+					/*
+					 * No remote-endpoint here on purpose.  The wide IMX586
+					 * node exists but its driver is not loaded, so registering
+					 * the async connection makes camss wait for a subdevice
+					 * that never probes: the notifier never completes and no
+					 * subdev nodes or links are created.  Re-add this once the
+					 * IMX586 driver actually binds.
+					 */
 					phandle = <0x148>;
 					clock-lanes = <0>;
 					data-lanes = <0 1 2 3>;
-					remote-endpoint = <0x149>;
 				};
 			};
 
