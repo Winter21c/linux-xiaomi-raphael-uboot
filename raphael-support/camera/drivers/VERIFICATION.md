@@ -45,11 +45,18 @@ csiphy2 v1.1 readback: 0x000=00000090 0x700=00000080 0x82c=000000ff 0x800=000000
 |---|---|---|
 | 0x000 | 0x90 | data lane 0 block, exactly the vendor table value |
 | 0x700 | 0x80 | the clock lane really is at 0x700 (not 0x600 as in 2.1.1) |
-| 0x82c | 0xff | first of the eleven interrupt mask registers |
+| 0x82c | 0xff | first entry of the eleven-register `csiphy_2ph_v1_1_reg` array (its semantics are unproven - see the correction in `analysis/csiphy-v1-1-real.md`) |
 | 0x800 | 0x00 | reset released (the 0x814/0x818/0x81c/0x800 sequence ran) |
 
 The CSID downstream of it still reads zero, so no frame has been captured yet; the
 PHY work itself is confirmed.
+
+Later rounds changed the picture: the CSID turned out to be mapped at the wrong base
+(0xacb0200 instead of 0xacb3000, fixed) and is proven able to receive via its own test
+generator, while a full-window scan of this PHY during an active stream shows **no
+register ever changing**.  The sensor is verified end to end (chip id 0x00885a, every
+MIPI register matching the mode table), so the PHY is correctly programmed and simply
+receives nothing - see `analysis/round87-sensor-verified-phy-silent.md`.
 
 ## Not verified
 

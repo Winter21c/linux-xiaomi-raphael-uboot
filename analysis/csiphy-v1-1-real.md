@@ -65,7 +65,25 @@ matches on hardware.
 | 0x700..0x7ff | **clock lane** (matches bit 0x80 of the enable mask) |
 | 0x800 | reset / enable control |
 | 0x814, 0x818, 0x81c | clock configuration |
-| 0x82c..0x854 | interrupt masks (11 registers) |
+| 0x82c..0x854 | the eleven registers of the `csiphy_2ph_v1_1_reg` array - **semantics not proven** |
+
+> **Correction (round 88).** Earlier revisions of this document called 0x82c..0x854
+> "interrupt masks".  That was a hypothesis, not a measurement.  In the vendor kernel
+> both `cam_csiphy_irq` (0x390ff24) and `cam_csiphy_cphy_data_rate_config` (0x390fd2c)
+> load the *same* pointer (`[res+80]`) and loop over `nreg` entries calling
+> `cam_io_r(base + offset)`, **discarding every value**:
+>
+> ```
+> 390ff4c: ldr  x8, [x19, #40]     ; res
+> 390ff54: ldr  x8, [x8, #80]      ; the table
+> 390ff58: ldrsw x8, [x8, x20]     ; offset of entry
+> 390ff5c: add  x1, x21, x8        ; base + offset
+> 390ff60: bl   38bde5c <cam_io_r>
+> ```
+>
+> They are debug stubs, so the image does not say whether these registers are masks,
+> data-rate timing, or anything else.  Our driver replays the array verbatim, which is
+> all the evidence supports. |
 
 There is **no second register page**. Everything is inside the 0x1000 window the
 device tree already maps, so the mainline mapping is correct - the earlier
